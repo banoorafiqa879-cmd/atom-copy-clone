@@ -1,10 +1,10 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { type Molecule, ELEMENT_DATA } from "@/data/molecules";
 import { PlaneOfSymmetry, CentreOfSymmetry, AxisOfSymmetry, StereocentreMarkers, type SymPlane } from "./Symmetry";
-import type { SymAxis } from "@/lib/chem-analysis";
+import { neighbors, type SymAxis } from "@/lib/chem-analysis";
 
 interface Props {
   molecule: Molecule;
