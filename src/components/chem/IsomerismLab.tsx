@@ -26,10 +26,33 @@ interface Props {
   initialTab?: Tab;
 }
 
-/** Build cis/trans isomers around the first detected C=C bond. */
+/** True if removing this bond still leaves a path between its endpoints (i.e. it's a ring bond). */
+function isRingBond(mol: Molecule, bondIdx: number): boolean {
+  const bond = mol.bonds[bondIdx];
+  const adj: Record<number, number[]> = {};
+  mol.bonds.forEach((b, i) => {
+    if (i === bondIdx) return;
+    (adj[b.a] ??= []).push(b.b);
+    (adj[b.b] ??= []).push(b.a);
+  });
+  const seen = new Set<number>([bond.a]);
+  const queue = [bond.a];
+  while (queue.length) {
+    const cur = queue.shift()!;
+    if (cur === bond.b) return true;
+    for (const n of adj[cur] ?? []) if (!seen.has(n)) { seen.add(n); queue.push(n); }
+  }
+  return false;
+}
+
+/** Build cis/trans isomers around the first detected acyclic C=C bond. */
 function buildGeometricIsomers(mol: Molecule): { cis?: Molecule; trans?: Molecule; reason?: string } {
-  const dbl = mol.bonds.find(b => b.order === 2 && mol.atoms[b.a].el === "C" && mol.atoms[b.b].el === "C");
-  if (!dbl) return { reason: "No C=C double bond detected." };
+  const dblIdx = mol.bonds.findIndex(b => b.order === 2 && mol.atoms[b.a].el === "C" && mol.atoms[b.b].el === "C");
+  if (dblIdx === -1) return { reason: "No C=C double bond detected." };
+  const dbl = mol.bonds[dblIdx];
+  if (isRingBond(mol, dblIdx)) {
+    return { reason: "C=C is part of a ring — exact 3D stereoisomer generation is not available for ring-bound double bonds in this engine. The Stereo Lab counts above are accurate." };
+  }
   // Each carbon must have 2 different substituents (other than the double bond partner) for cis/trans
   const c1 = dbl.a, c2 = dbl.b;
   const subs1 = neighbors(mol, c1).filter(n => n.idx !== c2);
