@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import Builder from "./Builder";
 import IsomerismLab from "./IsomerismLab";
 import StereoLab from "./StereoLab";
+import MobileToolbar from "./MobileToolbar";
 import {
   molecularFormula,
   molecularMass,
