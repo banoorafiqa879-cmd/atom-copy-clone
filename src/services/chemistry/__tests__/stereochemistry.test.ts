@@ -112,7 +112,6 @@ describe("real stereochemistry engine", () => {
   });
 });
 
-import { analyzeFromSmiles } from "@/services/chemistry/stereochemistry";
 
 describe("real stereochemistry — SMILES-driven cases", () => {
   it("2-butanol: 1 stereocenter, 2 enantiomers", async () => {
