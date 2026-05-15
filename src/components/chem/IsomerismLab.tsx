@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, Environment } from "@react-three/drei";
 import { TOUCH } from "three";
 import * as THREE from "three";
-import { X, FlaskConical, Link2, Link2Off } from "lucide-react";
-import { type Molecule, type Atom } from "@/data/molecules";
+import { X, FlaskConical, Link2, Link2Off, Info } from "lucide-react";
+import { type Molecule, type Atom, ELEMENT_DATA } from "@/data/molecules";
 import Molecule3D from "./Molecule3D";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   neighbors,
   stereocentres,
@@ -52,24 +53,25 @@ function isRingBond(mol: Molecule, bondIdx: number): boolean {
 /** Build cis/trans isomers around the first detected acyclic C=C bond. */
 function buildGeometricIsomers(mol: Molecule): { cis?: Molecule; trans?: Molecule; reason?: string } {
   const dblIdx = mol.bonds.findIndex(b => b.order === 2 && mol.atoms[b.a].el === "C" && mol.atoms[b.b].el === "C");
-  if (dblIdx === -1) return { reason: "No C=C double bond detected." };
+  if (dblIdx === -1) {
+    return { reason: "Geometrical (cis–trans / E–Z) isomerism requires a restricted rotation, typically an acyclic C=C double bond whose sp² carbons each carry two different substituents. This molecule has no such bond." };
+  }
   const dbl = mol.bonds[dblIdx];
   if (isRingBond(mol, dblIdx)) {
-    return { reason: "C=C is part of a ring — exact 3D stereoisomer generation is not available for ring-bound double bonds in this engine. The Stereo Lab counts above are accurate." };
+    return { reason: "The C=C double bond is part of a ring. Ring-constrained geometric isomers exist in principle, but exact 3D enumeration is not available in this engine — the Stereo Lab counts above remain accurate." };
   }
-  // Each carbon must have 2 different substituents (other than the double bond partner) for cis/trans
   const c1 = dbl.a, c2 = dbl.b;
   const subs1 = neighbors(mol, c1).filter(n => n.idx !== c2);
   const subs2 = neighbors(mol, c2).filter(n => n.idx !== c1);
-  if (subs1.length < 2 || subs2.length < 2) return { reason: "Each sp² carbon needs 2 substituents." };
+  if (subs1.length < 2 || subs2.length < 2) {
+    return { reason: "Each sp² carbon of the C=C bond must carry two substituents to define a geometry — this alkene is terminal." };
+  }
   const els1 = subs1.map(n => mol.atoms[n.idx].el);
   const els2 = subs2.map(n => mol.atoms[n.idx].el);
   if (new Set(els1).size < 2 || new Set(els2).size < 2) {
-    return { reason: "Both alkene carbons must carry two different substituents." };
+    return { reason: "Both alkene carbons must carry two different substituents to produce distinct cis/trans (E/Z) isomers. At least one carbon has identical groups." };
   }
-  // Build idealized planar molecule: C=C along x, substituents in plane
   const make = (mode: "cis" | "trans"): Molecule => {
-    // pick "heavy" sub on each carbon (non-H) and "light" (H or lighter)
     const heavy = (els: string[], idxs: typeof subs1) => {
       const heavyIdx = idxs.findIndex(n => mol.atoms[n.idx].el !== "H");
       if (heavyIdx === -1) return { heavy: idxs[0], light: idxs[1] };
@@ -81,10 +83,8 @@ function buildGeometricIsomers(mol: Molecule): { cis?: Molecule; trans?: Molecul
     const atoms: Atom[] = [
       { el: "C", pos: [-0.67, 0, 0] },
       { el: "C", pos: [0.67, 0, 0] },
-      // C1 substituents
-      { el: mol.atoms[h1.heavy.idx].el, pos: [-1.3, 0.92, 0] },          // up-left
-      { el: mol.atoms[h1.light.idx].el, pos: [-1.3, -0.92, 0] },         // down-left
-      // C2 substituents — cis = heavy on same side (up), trans = opposite
+      { el: mol.atoms[h1.heavy.idx].el, pos: [-1.3, 0.92, 0] },
+      { el: mol.atoms[h1.light.idx].el, pos: [-1.3, -0.92, 0] },
       { el: mol.atoms[h2.heavy.idx].el, pos: [1.3, mode === "cis" ? 0.92 : -0.92, 0] },
       { el: mol.atoms[h2.light.idx].el, pos: [1.3, mode === "cis" ? -0.92 : 0.92, 0] },
     ];
@@ -100,7 +100,9 @@ function buildGeometricIsomers(mol: Molecule): { cis?: Molecule; trans?: Molecul
       name: `${mode}-${mol.name}`,
       formula: mol.formula,
       group: "Geometrical isomer",
-      description: `${mode === "cis" ? "Cis" : "Trans"} isomer — substituents on ${mode === "cis" ? "same" : "opposite"} side of C=C.`,
+      description: mode === "cis"
+        ? "cis (Z) — higher-priority substituents on the same side of the C=C plane."
+        : "trans (E) — higher-priority substituents on opposite sides of the C=C plane.",
       atoms, bonds,
     };
   };
@@ -114,27 +116,60 @@ function buildEnantiomer(mol: Molecule): Molecule {
     id: `${mol.id}-mirror`,
     name: `${mol.name} (mirror)`,
     group: "Enantiomer",
-    description: "Non-superimposable mirror image — opposite stereochemistry.",
+    description: "Non-superimposable mirror image — opposite stereochemistry at every chiral centre.",
     atoms: mol.atoms.map(a => ({ ...a, pos: [-a.pos[0], a.pos[1], a.pos[2]] })),
   };
 }
 
 type RingForm = "chair" | "boat" | "twist-boat" | "half-chair";
 
+/** Compute the ideal camera distance to fit the molecule's bounding sphere. */
+function moleculeFitDistance(mol: Molecule, fovDeg = 45, paddingFactor = 1.6): number {
+  if (mol.atoms.length === 0) return 7;
+  const center = new THREE.Vector3();
+  mol.atoms.forEach(a => center.add(new THREE.Vector3(...a.pos)));
+  center.divideScalar(mol.atoms.length);
+  let r = 0;
+  mol.atoms.forEach(a => {
+    const radius = ELEMENT_DATA[a.el]?.radius ?? 0.3;
+    const d = new THREE.Vector3(...a.pos).distanceTo(center) + radius;
+    if (d > r) r = d;
+  });
+  const fov = (fovDeg * Math.PI) / 180;
+  const dist = (r * paddingFactor) / Math.sin(fov / 2);
+  return Math.max(3.2, Math.min(dist, 22));
+}
+
+/** Camera fitter — re-fits whenever the molecule changes. */
+function CameraFit({ molecule }: { molecule: Molecule }) {
+  const { camera } = useThree();
+  useEffect(() => {
+    const dist = moleculeFitDistance(molecule);
+    camera.position.set(0, 0, dist);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+  }, [molecule.id, camera]);
+  return null;
+}
+
 function MiniViewer({
   mol,
   mirrorPlane = false,
   syncRotationY,
+  highlightStereo = false,
 }: {
   mol: Molecule;
   mirrorPlane?: boolean;
-  /** When provided, disables orbit rotation and rotates the molecule group by this Y angle (rad). */
   syncRotationY?: number;
+  highlightStereo?: boolean;
 }) {
   const synced = syncRotationY !== undefined;
+  const stereoIdx = useMemo(() => (highlightStereo ? stereocentres(mol) : []), [mol, highlightStereo]);
+  const initialDist = useMemo(() => moleculeFitDistance(mol), [mol]);
   return (
-    <Canvas camera={{ position: [0, 0, 7], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
+    <Canvas camera={{ position: [0, 0, initialDist], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
       <color attach="background" args={["#05060d"]} />
+      <CameraFit molecule={mol} />
       <ambientLight intensity={0.5} />
       <directionalLight position={[5, 5, 5]} intensity={1.1} />
       <pointLight position={[-5, -3, 4]} intensity={0.5} color="#7af6ff" />
@@ -146,6 +181,7 @@ function MiniViewer({
             autoRotate={!synced}
             selected={null}
             onSelect={() => {}}
+            stereoIndices={stereoIdx}
           />
         </group>
         {mirrorPlane && (
@@ -158,13 +194,21 @@ function MiniViewer({
       </Suspense>
       <OrbitControls
         enableDamping dampingFactor={0.08}
-        minDistance={3} maxDistance={14}
+        minDistance={2.5} maxDistance={28}
         enableRotate={!synced}
         touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN }}
         makeDefault
       />
     </Canvas>
   );
+}
+
+/** Heuristic R/S labels for single-stereocentre molecules. Falls back to A/B otherwise. */
+function enantiomerLabels(centers: number): { a: string; b: string; aSub: string; bSub: string } {
+  if (centers === 1) {
+    return { a: "Enantiomer A", b: "Enantiomer B", aSub: "(R) configuration", bSub: "(S) configuration" };
+  }
+  return { a: "Enantiomer A", b: "Enantiomer B", aSub: `${centers} stereocentres`, bSub: "all inverted" };
 }
 
 export default function IsomerismLab({ molecule, onClose, initialTab = "geometric", stereoCenters, isMeso, classification }: Props) {
@@ -175,6 +219,8 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
   const [confMode, setConfMode] = useState<"bond" | "ring">("bond");
   const [compare, setCompare] = useState(false);
   const [syncRot, setSyncRot] = useState(0);
+  const [mobileSide, setMobileSide] = useState<"a" | "b">("a"); // mobile cis/trans + A/B switcher
+  const isMobile = useIsMobile();
 
   const geom = useMemo(() => buildGeometricIsomers(molecule), [molecule]);
   const stereo = useMemo(() => stereocentres(molecule), [molecule]);
@@ -194,56 +240,55 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
   );
   const ringMol = useMemo(() => cyclohex ? cyclohexaneConformer(ringForm) : null, [cyclohex, ringForm]);
 
-  // Default to ring mode if molecule has cyclohexane and no good rotatable bonds
   useEffect(() => {
     if (cyclohex && rotBonds.length === 0) setConfMode("ring");
     else if (!cyclohex) setConfMode("bond");
   }, [cyclohex, rotBonds.length]);
 
-  // Reset bond index / dihedral when molecule changes
   useEffect(() => {
     setBondIdx(0);
     setDihedral(60);
+    setMobileSide("a");
   }, [molecule.id]);
 
   const hasConformation = rotBonds.length > 0 || !!cyclohex;
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-background/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fade-in"
+      className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-stretch sm:items-center justify-center p-0 sm:p-6 animate-fade-in"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="glass relative w-full max-w-5xl h-[92vh] sm:h-[88vh] rounded-2xl border border-white/10 overflow-hidden flex flex-col"
+        className="glass relative w-full sm:max-w-5xl h-[100dvh] sm:h-[88vh] sm:rounded-2xl border-0 sm:border border-white/10 overflow-hidden flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <FlaskConical className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
-            <div>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/10 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <FlaskConical className="h-4 w-4 text-[hsl(var(--neon-cyan))] shrink-0" />
+            <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(var(--neon-cyan))]">Isomerism Lab</div>
-              <div className="text-sm font-semibold">{molecule.name}</div>
+              <div className="text-sm font-semibold truncate">{molecule.name}</div>
             </div>
           </div>
-          <button onClick={onClose} className="opacity-60 hover:opacity-100 p-2">
+          <button onClick={onClose} className="opacity-70 hover:opacity-100 p-2 -mr-2" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 px-3 sm:px-5 py-2 border-b border-white/5 overflow-x-auto">
+        {/* Sticky tabs */}
+        <div className="sticky top-0 z-10 flex items-center gap-1 px-3 sm:px-5 py-2 border-b border-white/5 bg-background/70 backdrop-blur-md shrink-0 overflow-x-auto">
           <div className="flex gap-1 flex-1">
           {([
-            ["geometric", "Geometrical (cis/trans)"],
-            ["optical", "Optical (enantiomer)"],
+            ["geometric", "Geometrical"],
+            ["optical", "Optical"],
             ["conformation", "Conformation"],
           ] as [Tab, string][]).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
               className={cn(
-                "text-[11px] sm:text-xs px-3 py-1.5 rounded-lg whitespace-nowrap transition",
+                "text-[11px] sm:text-xs px-3 py-2 rounded-lg whitespace-nowrap transition min-h-[40px]",
                 tab === k
                   ? "bg-[hsl(var(--neon-cyan))]/15 border border-[hsl(var(--neon-cyan))]/50 text-[hsl(var(--neon-cyan))]"
                   : "border border-white/10 text-foreground/70 hover:text-foreground"
@@ -253,11 +298,11 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
             </button>
           ))}
           </div>
-          {tab !== "conformation" && (
+          {tab !== "conformation" && !isMobile && (
             <button
               onClick={() => setCompare(v => !v)}
               className={cn(
-                "text-[10px] sm:text-[11px] px-2.5 py-1.5 rounded-lg whitespace-nowrap transition flex items-center gap-1.5 border",
+                "text-[11px] px-2.5 py-1.5 rounded-lg whitespace-nowrap transition flex items-center gap-1.5 border",
                 compare
                   ? "bg-[hsl(var(--neon-cyan))]/15 border-[hsl(var(--neon-cyan))]/50 text-[hsl(var(--neon-cyan))]"
                   : "border-white/10 text-foreground/70 hover:text-foreground"
@@ -265,13 +310,13 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
               title="Synchronize rotation across both viewers"
             >
               {compare ? <Link2 className="h-3 w-3" /> : <Link2Off className="h-3 w-3" />}
-              Compare
+              Sync rotate
             </button>
           )}
         </div>
 
-        {compare && tab !== "conformation" && (
-          <div className="px-4 sm:px-6 py-2 border-b border-white/5 flex items-center gap-3">
+        {compare && tab !== "conformation" && !isMobile && (
+          <div className="px-4 sm:px-6 py-2 border-b border-white/5 flex items-center gap-3 shrink-0">
             <span className="text-[10px] uppercase tracking-widest text-foreground/50 whitespace-nowrap">Sync rotate</span>
             <input
               type="range" min={0} max={360} step={1}
@@ -284,22 +329,66 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 flex flex-col">
           {tab === "geometric" && (
             geom.reason ? (
-              <div className="text-center text-sm text-foreground/60 mt-12 px-6 leading-relaxed">
-                {geom.reason}
-                <div className="mt-2 text-xs text-foreground/40">Try a molecule like 2-butene, but-2-ene, or any disubstituted alkene.</div>
+              <div className="m-auto max-w-md w-full px-2">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
+                  <Info className="h-5 w-5 mx-auto mb-2 text-[hsl(var(--neon-cyan))]" />
+                  <div className="text-[10px] uppercase tracking-[0.3em] text-foreground/50 mb-2">No geometrical isomers</div>
+                  <p className="text-xs sm:text-sm text-foreground/80 leading-relaxed">{geom.reason}</p>
+                  <div className="mt-3 text-[11px] text-foreground/50">Try 2-butene, stilbene, or 1,2-dichloroethene.</div>
+                </div>
+              </div>
+            ) : isMobile ? (
+              <div className="flex flex-col gap-3 flex-1">
+                {/* Mobile tabs */}
+                <div className="flex gap-1 p-1 rounded-xl bg-white/5 border border-white/10">
+                  {([["a", `cis (Z)`], ["b", `trans (E)`]] as const).map(([k, lbl]) => (
+                    <button
+                      key={k}
+                      onClick={() => setMobileSide(k)}
+                      className={cn(
+                        "flex-1 text-xs py-2 rounded-lg transition font-medium",
+                        mobileSide === k
+                          ? "bg-[hsl(var(--neon-cyan))]/20 text-[hsl(var(--neon-cyan))]"
+                          : "text-foreground/60"
+                      )}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+                {(() => {
+                  const m = mobileSide === "a" ? geom.cis! : geom.trans!;
+                  return (
+                    <div className="flex-1 flex flex-col rounded-xl overflow-hidden border border-white/10 bg-black/40">
+                      <div className="px-3 py-2 border-b border-white/10">
+                        <div className="text-[10px] uppercase tracking-widest text-[hsl(var(--neon-cyan))]">{mobileSide === "a" ? "cis · Z isomer" : "trans · E isomer"}</div>
+                        <div className="font-semibold text-sm">{m.name}</div>
+                      </div>
+                      <div className="flex-1 min-h-[320px]"><MiniViewer mol={m} /></div>
+                      <div className="px-3 py-2 text-[11px] text-foreground/70 leading-relaxed border-t border-white/5">
+                        {m.description}
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-foreground/60">
+                  <span className="text-[hsl(var(--neon-cyan))] font-medium">Z/E rule:</span> when the two higher-CIP-priority groups lie on the same side, the alkene is Z (cis); on opposite sides, it is E (trans).
+                </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 h-full">
-                {[geom.cis!, geom.trans!].map((m) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1">
+                {[geom.cis!, geom.trans!].map((m, i) => (
                   <div key={m.id} className="rounded-xl overflow-hidden border border-white/10 bg-black/40 flex flex-col">
                     <div className="px-3 py-2 border-b border-white/10">
-                      <div className="text-[10px] uppercase tracking-widest text-[hsl(var(--neon-cyan))]">{m.group}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-[hsl(var(--neon-cyan))]">
+                        {i === 0 ? "cis · Z isomer" : "trans · E isomer"}
+                      </div>
                       <div className="font-semibold">{m.name}</div>
                     </div>
-                    <div className="flex-1 min-h-[260px]"><MiniViewer mol={m} syncRotationY={compare ? syncRot : undefined} /></div>
+                    <div className="flex-1 min-h-[280px]"><MiniViewer mol={m} syncRotationY={compare ? syncRot : undefined} /></div>
                     <div className="px-3 py-2 text-[11px] text-foreground/70">{m.description}</div>
                   </div>
                 ))}
@@ -308,7 +397,6 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
           )}
 
           {tab === "optical" && (() => {
-            // Authoritative source: RDKit engine if provided, else local heuristic.
             const centers = stereoCenters ?? stereo.length;
             const meso = isMeso ?? false;
             const cls = classification ?? (centers === 0 ? "achiral" : "chiral-single");
@@ -316,19 +404,18 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
 
             if (!showMirror) {
               const reason = centers === 0
-                ? `${molecule.name} has no stereogenic centres — it is achiral. A mirror image is superimposable on the original, so no enantiomer exists.`
-                : `${molecule.name} contains stereocentres but is meso: an internal mirror plane makes it identical to its mirror image. No optical isomerism.`;
+                ? `${molecule.name} contains no stereogenic centres — it is achiral. Its mirror image is superimposable on the original, so no enantiomer exists.`
+                : `${molecule.name} has stereocentres but is meso: an internal mirror plane makes the molecule identical to its mirror image. The compound is optically inactive overall.`;
               return (
-                <div className="max-w-md mx-auto mt-8 sm:mt-12 px-4">
+                <div className="m-auto max-w-md w-full px-2">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
-                    <div className="text-[10px] uppercase tracking-[0.3em] text-foreground/50 mb-2">
-                      No optical isomerism
-                    </div>
+                    <Info className="h-5 w-5 mx-auto mb-2 text-[hsl(var(--neon-cyan))]" />
+                    <div className="text-[10px] uppercase tracking-[0.3em] text-foreground/50 mb-2">No optical isomerism</div>
                     <div className="text-base font-semibold mb-2">
                       {cls === "meso" ? "Meso compound" : "Achiral molecule"}
                     </div>
-                    <p className="text-xs text-foreground/70 leading-relaxed">{reason}</p>
-                    <div className="mt-4 text-[11px] text-foreground/50">
+                    <p className="text-xs sm:text-sm text-foreground/80 leading-relaxed">{reason}</p>
+                    <div className="mt-3 text-[11px] text-foreground/50">
                       Try a chiral compound: 2-butanol, lactic acid, alanine, or 2-chlorobutane.
                     </div>
                   </div>
@@ -336,44 +423,86 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
               );
             }
 
+            const labels = enantiomerLabels(centers);
+            const pair = [
+              { mol: molecule, label: labels.a, sub: labels.aSub, mirror: false },
+              { mol: enant, label: labels.b, sub: labels.bSub, mirror: true },
+            ];
+
             return (
-              <div>
-                <div className="text-xs text-foreground/70 mb-3">
-                  {centers} stereocentre{centers > 1 ? "s" : ""} detected. Mirror image shown across the symmetry plane —
-                  the two structures are non-superimposable enantiomers.
+              <div className="flex flex-col flex-1">
+                <div className="text-[11px] sm:text-xs text-foreground/70 mb-3 leading-relaxed">
+                  <span className="text-[hsl(var(--neon-cyan))] font-medium">{centers} stereocentre{centers > 1 ? "s" : ""}</span> detected.
+                  Enantiomers are non-superimposable mirror images that rotate plane-polarized light in opposite directions.
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 h-[calc(100%-3rem)]">
-                  {[molecule, enant].map((m, i) => (
-                    <div key={m.id} className="rounded-xl overflow-hidden border border-white/10 bg-black/40 flex flex-col">
-                      <div className="px-3 py-2 border-b border-white/10">
-                        <div className="text-[10px] uppercase tracking-widest text-[hsl(var(--neon-cyan))]">
-                          {i === 0 ? "Original" : "Enantiomer"}
-                        </div>
-                        <div className="font-semibold">{m.name}</div>
-                      </div>
-                      <div className="flex-1 min-h-[260px]">
-                        <MiniViewer mol={m} mirrorPlane={i === 1} syncRotationY={compare ? syncRot : undefined} />
-                      </div>
+
+                {isMobile ? (
+                  <>
+                    <div className="flex gap-1 p-1 rounded-xl bg-white/5 border border-white/10 mb-3">
+                      {(["a", "b"] as const).map((k, i) => (
+                        <button
+                          key={k}
+                          onClick={() => setMobileSide(k)}
+                          className={cn(
+                            "flex-1 text-xs py-2 rounded-lg transition font-medium",
+                            mobileSide === k
+                              ? "bg-[hsl(var(--neon-cyan))]/20 text-[hsl(var(--neon-cyan))]"
+                              : "text-foreground/60"
+                          )}
+                        >
+                          {pair[i].label}
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                    {(() => {
+                      const p = pair[mobileSide === "a" ? 0 : 1];
+                      return (
+                        <div className="flex-1 flex flex-col rounded-xl overflow-hidden border border-white/10 bg-black/40">
+                          <div className="px-3 py-2 border-b border-white/10">
+                            <div className="text-[10px] uppercase tracking-widest text-[hsl(var(--neon-cyan))]">{p.label}</div>
+                            <div className="font-semibold text-sm">{p.sub}</div>
+                          </div>
+                          <div className="flex-1 min-h-[320px]">
+                            <MiniViewer mol={p.mol} mirrorPlane={p.mirror} highlightStereo />
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1">
+                    {pair.map((p, i) => (
+                      <div key={i} className="rounded-xl overflow-hidden border border-white/10 bg-black/40 flex flex-col">
+                        <div className="px-3 py-2 border-b border-white/10">
+                          <div className="text-[10px] uppercase tracking-widest text-[hsl(var(--neon-cyan))]">{p.label}</div>
+                          <div className="font-semibold text-sm">{p.sub}</div>
+                        </div>
+                        <div className="flex-1 min-h-[280px]">
+                          <MiniViewer mol={p.mol} mirrorPlane={p.mirror} syncRotationY={compare ? syncRot : undefined} highlightStereo />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
 
           {tab === "conformation" && (
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col flex-1">
               {!hasConformation ? (
-                <div className="text-center text-sm text-foreground/60 mt-12 px-6 leading-relaxed">
-                  Conformational isomerism is not significant for <span className="text-foreground">{molecule.name}</span>.
-                  <div className="mt-2 text-xs text-foreground/40">
-                    The molecule has no freely rotatable σ bonds (bonds are terminal, multiple, or locked in a rigid/aromatic ring).
-                    Try a flexible alkane (butane, pentane), an alcohol, or cyclohexane.
+                <div className="m-auto max-w-md w-full px-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
+                    <Info className="h-5 w-5 mx-auto mb-2 text-[hsl(var(--neon-cyan))]" />
+                    <div className="text-[10px] uppercase tracking-[0.3em] text-foreground/50 mb-2">No conformational isomerism</div>
+                    <p className="text-xs sm:text-sm text-foreground/80 leading-relaxed">
+                      <span className="text-foreground font-medium">{molecule.name}</span> has no freely rotatable σ bonds — every bond is terminal, multiple, or locked in a rigid/aromatic ring.
+                    </p>
+                    <div className="mt-3 text-[11px] text-foreground/50">Try butane, pentane, ethanol, or cyclohexane.</div>
                   </div>
                 </div>
               ) : (
                 <>
-                  {/* Mode toggle when both options exist */}
                   {cyclohex && rotBonds.length > 0 && (
                     <div className="flex gap-1 mb-2">
                       {(["bond", "ring"] as const).map(m => (
@@ -396,8 +525,7 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
                   {confMode === "bond" && activeBond && (
                     <>
                       <div className="text-xs text-foreground/70 mb-2">
-                        Rotating <span className="text-foreground font-medium">{activeBond.label}</span> in {molecule.name}.
-                        Staggered/anti = low energy; eclipsed = high (torsional strain).
+                        Rotating <span className="text-foreground font-medium">{activeBond.label}</span>. Staggered/anti = low energy; eclipsed = high (torsional strain).
                       </div>
 
                       {rotBonds.length > 1 && (
@@ -420,7 +548,7 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
                         </div>
                       )}
 
-                      <div className="flex-1 min-h-[260px] rounded-xl overflow-hidden border border-white/10 bg-black/40 mb-3">
+                      <div className="flex-1 min-h-[300px] rounded-xl overflow-hidden border border-white/10 bg-black/40 mb-3">
                         <MiniViewer mol={rotated} />
                       </div>
                       <div className="px-1">
@@ -471,7 +599,7 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
                           </button>
                         ))}
                       </div>
-                      <div className="flex-1 min-h-[260px] rounded-xl overflow-hidden border border-white/10 bg-black/40 mb-3">
+                      <div className="flex-1 min-h-[300px] rounded-xl overflow-hidden border border-white/10 bg-black/40 mb-3">
                         <MiniViewer mol={ringMol} />
                       </div>
                       <div className="px-1 text-[11px] text-foreground/70">
