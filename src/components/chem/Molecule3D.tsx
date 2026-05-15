@@ -1,0 +1,150 @@
+import { useMemo, useRef } from "react";
+import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
+import { type Molecule, ELEMENT_DATA } from "@/data/molecules";
+import { PlaneOfSymmetry, CentreOfSymmetry, AxisOfSymmetry, StereocentreMarkers, type SymPlane } from "./Symmetry";
+import type { SymAxis } from "@/lib/chem-analysis";
+
+interface Props {
+  molecule: Molecule;
+  spaceFilling: boolean;
+  autoRotate: boolean;
+  selected: number | null;
+  onSelect: (i: number | null) => void;
+  showPOS?: boolean;
+  activePlane?: SymPlane | null;
+  showCOS?: boolean;
+  hasCOS?: boolean;
+  activeAxis?: SymAxis | null;
+  stereoIndices?: number[];
+}
+
+function Bond({
+  start,
+  end,
+  order,
+}: {
+  start: THREE.Vector3;
+  end: THREE.Vector3;
+  order: 1 | 2 | 3;
+}) {
+  const dir = new THREE.Vector3().subVectors(end, start);
+  const length = dir.length();
+  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+  const quat = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    dir.clone().normalize()
+  );
+
+  // perpendicular offset for multi bonds
+  const perp = new THREE.Vector3(0, 0, 1).applyQuaternion(quat).normalize();
+  const offsets = order === 1 ? [0] : order === 2 ? [-0.12, 0.12] : [-0.18, 0, 0.18];
+
+  return (
+    <group position={mid} quaternion={quat}>
+      {offsets.map((o, i) => (
+        <mesh key={i} position={perp.clone().multiplyScalar(o)}>
+          <cylinderGeometry args={[0.07, 0.07, length, 16]} />
+          <meshStandardMaterial
+            color="#cfd6e4"
+            metalness={0.6}
+            roughness={0.25}
+            emissive="#3a4a6a"
+            emissiveIntensity={0.15}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+export default function Molecule3D({
+  molecule,
+  spaceFilling,
+  autoRotate,
+  selected,
+  onSelect,
+  showPOS,
+  activePlane,
+  showCOS,
+  hasCOS,
+  activeAxis,
+  stereoIndices,
+}: Props) {
+  const group = useRef<THREE.Group>(null);
+
+  const center = useMemo(() => {
+    const c = new THREE.Vector3();
+    molecule.atoms.forEach((a) => c.add(new THREE.Vector3(...a.pos)));
+    c.divideScalar(molecule.atoms.length);
+    return c;
+  }, [molecule]);
+
+  useFrame((_, delta) => {
+    if (group.current && autoRotate) {
+      group.current.rotation.y += delta * 0.4;
+    }
+  });
+
+  return (
+    <group ref={group} position={[-center.x, -center.y, -center.z]}>
+      {showPOS && activePlane && (
+        <PlaneOfSymmetry mol={molecule} plane={activePlane} />
+      )}
+      {showCOS && hasCOS && <CentreOfSymmetry mol={molecule} />}
+      {activeAxis && <AxisOfSymmetry mol={molecule} axis={activeAxis} />}
+      {stereoIndices && stereoIndices.length > 0 && (
+        <StereocentreMarkers mol={molecule} indices={stereoIndices} />
+      )}
+
+      {!spaceFilling &&
+        molecule.bonds.map((b, i) => {
+          const s = new THREE.Vector3(...molecule.atoms[b.a].pos);
+          const e = new THREE.Vector3(...molecule.atoms[b.b].pos);
+          return <Bond key={i} start={s} end={e} order={b.order} />;
+        })}
+
+      {molecule.atoms.map((atom, i) => {
+        const data = ELEMENT_DATA[atom.el];
+        const r = spaceFilling ? data.radius * 2.4 : data.radius;
+        const isSelected = selected === i;
+        return (
+          <group key={i} position={atom.pos}>
+            <mesh
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onSelect(i);
+              }}
+              scale={isSelected ? 1.18 : 1}
+            >
+              <sphereGeometry args={[r, 48, 48]} />
+              <meshPhysicalMaterial
+                color={data.color}
+                metalness={0.35}
+                roughness={0.25}
+                clearcoat={0.7}
+                clearcoatRoughness={0.15}
+                emissive={isSelected ? data.color : "#000000"}
+                emissiveIntensity={isSelected ? 0.6 : 0}
+              />
+            </mesh>
+            {isSelected && (
+              <Html
+                center
+                distanceFactor={8}
+                position={[0, r + 0.4, 0]}
+                style={{ pointerEvents: "none" }}
+              >
+                <div className="glass rounded-xl px-3 py-2 text-xs whitespace-nowrap shadow-xl border border-white/10">
+                  <div className="font-semibold neon-text">{data.name}</div>
+                  <div className="text-foreground/70">Symbol: {atom.el}</div>
+                </div>
+              </Html>
+            )}
+          </group>
+        );
+      })}
+    </group>
+  );
+}
