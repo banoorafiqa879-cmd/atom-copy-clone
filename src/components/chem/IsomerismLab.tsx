@@ -24,6 +24,10 @@ interface Props {
   molecule: Molecule;
   onClose: () => void;
   initialTab?: Tab;
+  /** Authoritative stereo report from the RDKit engine (preferred over local heuristics). */
+  stereoCenters?: number;
+  isMeso?: boolean;
+  classification?: "achiral" | "chiral-single" | "chiral-multi" | "meso";
 }
 
 /** True if removing this bond still leaves a path between its endpoints (i.e. it's a ring bond). */
