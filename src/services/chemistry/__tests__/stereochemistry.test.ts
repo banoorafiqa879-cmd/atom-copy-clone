@@ -29,6 +29,7 @@ vi.mock("@/services/chemistry/rdkit", async () => {
 });
 
 import { analyzeStereochemistry } from "@/services/chemistry";
+import { analyzeFromSmiles } from "@/services/chemistry/stereochemistry";
 import { getRDKit } from "@/services/chemistry/rdkit";
 import type { Molecule, Element } from "@/data/molecules";
 
