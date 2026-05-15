@@ -24,6 +24,10 @@ interface Props {
   molecule: Molecule;
   onClose: () => void;
   initialTab?: Tab;
+  /** Authoritative stereo report from the RDKit engine (preferred over local heuristics). */
+  stereoCenters?: number;
+  isMeso?: boolean;
+  classification?: "achiral" | "chiral-single" | "chiral-multi" | "meso";
 }
 
 /** True if removing this bond still leaves a path between its endpoints (i.e. it's a ring bond). */
@@ -163,7 +167,7 @@ function MiniViewer({
   );
 }
 
-export default function IsomerismLab({ molecule, onClose, initialTab = "geometric" }: Props) {
+export default function IsomerismLab({ molecule, onClose, initialTab = "geometric", stereoCenters, isMeso, classification }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [dihedral, setDihedral] = useState(60);
   const [bondIdx, setBondIdx] = useState(0);
@@ -303,30 +307,59 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
             )
           )}
 
-          {tab === "optical" && (
-            <div>
-              <div className="text-xs text-foreground/70 mb-3">
-                {stereo.length === 0
-                  ? "No stereocentres detected — molecule is achiral. Mirror image shown for comparison."
-                  : `${stereo.length} stereocentre${stereo.length > 1 ? "s" : ""} detected. Mirror image shown across the symmetry plane.`}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 h-[calc(100%-3rem)]">
-                {[molecule, enant].map((m, i) => (
-                  <div key={m.id} className="rounded-xl overflow-hidden border border-white/10 bg-black/40 flex flex-col">
-                    <div className="px-3 py-2 border-b border-white/10">
-                      <div className="text-[10px] uppercase tracking-widest text-[hsl(var(--neon-cyan))]">
-                        {i === 0 ? "Original" : "Enantiomer"}
-                      </div>
-                      <div className="font-semibold">{m.name}</div>
+          {tab === "optical" && (() => {
+            // Authoritative source: RDKit engine if provided, else local heuristic.
+            const centers = stereoCenters ?? stereo.length;
+            const meso = isMeso ?? false;
+            const cls = classification ?? (centers === 0 ? "achiral" : "chiral-single");
+            const showMirror = centers > 0 && !meso;
+
+            if (!showMirror) {
+              const reason = centers === 0
+                ? `${molecule.name} has no stereogenic centres — it is achiral. A mirror image is superimposable on the original, so no enantiomer exists.`
+                : `${molecule.name} contains stereocentres but is meso: an internal mirror plane makes it identical to its mirror image. No optical isomerism.`;
+              return (
+                <div className="max-w-md mx-auto mt-8 sm:mt-12 px-4">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
+                    <div className="text-[10px] uppercase tracking-[0.3em] text-foreground/50 mb-2">
+                      No optical isomerism
                     </div>
-                    <div className="flex-1 min-h-[260px]">
-                      <MiniViewer mol={m} mirrorPlane={i === 1} syncRotationY={compare ? syncRot : undefined} />
+                    <div className="text-base font-semibold mb-2">
+                      {cls === "meso" ? "Meso compound" : "Achiral molecule"}
+                    </div>
+                    <p className="text-xs text-foreground/70 leading-relaxed">{reason}</p>
+                    <div className="mt-4 text-[11px] text-foreground/50">
+                      Try a chiral compound: 2-butanol, lactic acid, alanine, or 2-chlorobutane.
                     </div>
                   </div>
-                ))}
+                </div>
+              );
+            }
+
+            return (
+              <div>
+                <div className="text-xs text-foreground/70 mb-3">
+                  {centers} stereocentre{centers > 1 ? "s" : ""} detected. Mirror image shown across the symmetry plane —
+                  the two structures are non-superimposable enantiomers.
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 h-[calc(100%-3rem)]">
+                  {[molecule, enant].map((m, i) => (
+                    <div key={m.id} className="rounded-xl overflow-hidden border border-white/10 bg-black/40 flex flex-col">
+                      <div className="px-3 py-2 border-b border-white/10">
+                        <div className="text-[10px] uppercase tracking-widest text-[hsl(var(--neon-cyan))]">
+                          {i === 0 ? "Original" : "Enantiomer"}
+                        </div>
+                        <div className="font-semibold">{m.name}</div>
+                      </div>
+                      <div className="flex-1 min-h-[260px]">
+                        <MiniViewer mol={m} mirrorPlane={i === 1} syncRotationY={compare ? syncRot : undefined} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {tab === "conformation" && (
             <div className="flex flex-col h-full">

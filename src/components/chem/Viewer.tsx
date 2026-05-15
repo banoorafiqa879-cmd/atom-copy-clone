@@ -341,7 +341,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           <button
             onClick={() => setIupacOpen((v) => !v)}
             className={cn(
-              "glass h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold",
+              "glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold",
               iupacOpen && "neon-glow"
             )}
             title="Generate from IUPAC name"
@@ -351,7 +351,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           </button>
           <button
             onClick={() => setBuilderOpen(true)}
-            className="glass h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold"
+            className="glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold"
             title="Open Molecule Builder"
           >
             <Pencil className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
@@ -359,7 +359,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           </button>
           <button
             onClick={() => { setIsoTab("geometric"); setIsoOpen(true); }}
-            className="glass h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold"
+            className="glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold"
             title="Isomerism Lab"
           >
             <FlaskConical className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
@@ -369,7 +369,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
             data-stereolab-launcher
             onClick={() => setStereoLabOpen((v) => !v)}
             className={cn(
-              "glass h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold",
+              "glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold",
               stereoLabOpen && "neon-glow",
             )}
             title="Stereochemistry Lab"
@@ -380,7 +380,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           <button
             onClick={handleSaveToLibrary}
             className={cn(
-              "glass h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold",
+              "glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold",
               alreadySaved && "neon-glow",
             )}
             title={alreadySaved ? "Already in your library" : "Add to Library"}
@@ -395,7 +395,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           </button>
           <Link
             to="/library"
-            className="glass h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold"
+            className="glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold"
             title="Open My Library"
           >
             <LibraryIcon className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
@@ -403,7 +403,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           </Link>
           <button
             onClick={() => setAutoRotate((v) => !v)}
-            className="glass h-9 w-9 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition"
+            className="glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition"
             title="Auto rotate"
           >
             {autoRotate ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -411,7 +411,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           <button
             onClick={() => setSpaceFilling((v) => !v)}
             className={cn(
-              "glass h-9 w-9 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition",
+              "glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition",
               spaceFilling && "neon-glow"
             )}
             title="Space-filling model"
@@ -420,21 +420,21 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           </button>
           <button
             onClick={() => setResetKey((k) => k + 1)}
-            className="glass h-9 w-9 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition"
+            className="glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition"
             title="Fit Molecule (recenter view)"
           >
             <Crosshair className="h-4 w-4" />
           </button>
           <button
             onClick={() => setPresentation(true)}
-            className="glass h-9 w-9 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition hidden sm:flex"
+            className="glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition hidden sm:flex"
             title="Presentation mode"
           >
             <Presentation className="h-4 w-4" />
           </button>
           <button
             onClick={fullScreen}
-            className="glass h-9 w-9 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition hidden sm:flex"
+            className="glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition hidden sm:flex"
             title="Fullscreen"
           >
             <Maximize2 className="h-4 w-4" />
@@ -912,7 +912,14 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
       )}
 
       {isoOpen && (
-        <IsomerismLab molecule={mol} initialTab={isoTab} onClose={() => setIsoOpen(false)} />
+        <IsomerismLab
+          molecule={mol}
+          initialTab={isoTab}
+          onClose={() => setIsoOpen(false)}
+          stereoCenters={stereoSummary.centres.length}
+          isMeso={stereoSummary.isMeso}
+          classification={stereoSummary.classification}
+        />
       )}
 
       <StereoLab
