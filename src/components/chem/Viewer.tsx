@@ -912,7 +912,14 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
       )}
 
       {isoOpen && (
-        <IsomerismLab molecule={mol} initialTab={isoTab} onClose={() => setIsoOpen(false)} />
+        <IsomerismLab
+          molecule={mol}
+          initialTab={isoTab}
+          onClose={() => setIsoOpen(false)}
+          stereoCenters={stereoSummary.centres.length}
+          isMeso={stereoSummary.isMeso}
+          classification={stereoSummary.classification}
+        />
       )}
 
       <StereoLab
