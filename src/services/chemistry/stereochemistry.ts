@@ -49,6 +49,20 @@ export async function analyzeStereochemistry(mol: Molecule): Promise<StereoRepor
   } finally {
     jsmol.delete();
   }
+  return analyzeFromSmiles(assigned);
+}
+
+/** Analyze a molecule directly from a SMILES string (preserves all stereo markers). */
+export async function analyzeFromSmiles(smiles: string): Promise<StereoReport> {
+  const rdkit = await getRDKit();
+  const jsmol = rdkit.get_mol(smiles);
+  if (!jsmol) throw new Error(`RDKit could not parse SMILES "${smiles}"`);
+  let assigned: string;
+  try {
+    assigned = jsmol.get_smiles();
+  } finally {
+    jsmol.delete();
+  }
 
   // Enumerate over RDKit-perceived stereo sites
   const enumerated = await enumerateStereoisomerSmiles(assigned);
