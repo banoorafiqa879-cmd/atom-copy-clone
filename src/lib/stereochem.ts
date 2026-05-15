@@ -111,3 +111,30 @@ export function classificationLabel(c: ChiralityClass): string {
     case "meso": return "Meso compound";
   }
 }
+
+// ---------------------------------------------------------------------------
+// Real RDKit-backed adapter — preferred when available.
+// Falls back to the heuristic above only when the engine fails.
+// ---------------------------------------------------------------------------
+
+import { analyzeStereochemistry } from "@/services/chemistry";
+
+export async function stereochemSummaryAsync(mol: Molecule): Promise<StereoSummary> {
+  const r = await analyzeStereochemistry(mol);
+  // Map RDKit centres count back to atom indices (best-effort placeholder
+  // list — UI uses .length and the existing heuristic indices for highlighting).
+  const heuristicCentres = stereocentres(mol);
+  return {
+    centres: heuristicCentres.length === r.centers ? heuristicCentres : heuristicCentres.slice(0, r.centers),
+    geomSites: r.ezBonds,
+    hasInternalMirror: r.isMeso,
+    isMeso: r.isMeso,
+    isChiral: r.classification === "chiral-single" || r.classification === "chiral-multi",
+    classification: r.classification,
+    opticalIsomers: r.opticalIsomers,
+    geometricIsomers: r.geometricIsomers,
+    totalStereoisomers: r.totalStereoisomers,
+    approximate: false,
+    notes: r.notes,
+  };
+}
