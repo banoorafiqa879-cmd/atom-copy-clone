@@ -1,10 +1,10 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { type Molecule, ELEMENT_DATA } from "@/data/molecules";
 import { PlaneOfSymmetry, CentreOfSymmetry, AxisOfSymmetry, StereocentreMarkers, type SymPlane } from "./Symmetry";
-import type { SymAxis } from "@/lib/chem-analysis";
+import { neighbors, type SymAxis } from "@/lib/chem-analysis";
 
 interface Props {
   molecule: Molecule;
@@ -87,6 +87,31 @@ export default function Molecule3D({
     }
   });
 
+  // Outside-tap dismiss for selected atom tooltip
+  useEffect(() => {
+    if (selected === null) return;
+    const dismiss = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("[data-atom-tooltip]")) return;
+      if (t?.closest("canvas")) return; // canvas clicks handled by mesh
+      onSelect(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onSelect(null); };
+    // Defer attach so the originating tap doesn't immediately dismiss
+    const id = window.setTimeout(() => {
+      window.addEventListener("pointerdown", dismiss);
+      window.addEventListener("keydown", onKey);
+    }, 50);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener("pointerdown", dismiss);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [selected, onSelect]);
+
+  const stereoSet = useMemo(() => new Set(stereoIndices ?? []), [stereoIndices]);
+  const singleStereo = (stereoIndices?.length ?? 0) === 1;
+
   return (
     <group ref={group} position={[-center.x, -center.y, -center.z]}>
       {showPOS && activePlane && (
@@ -109,12 +134,14 @@ export default function Molecule3D({
         const data = ELEMENT_DATA[atom.el];
         const r = spaceFilling ? data.radius * 2.4 : data.radius;
         const isSelected = selected === i;
+        const isStereo = stereoSet.has(i);
+        const subs = isSelected ? neighbors(molecule, i).map(n => molecule.atoms[n.idx].el) : [];
         return (
           <group key={i} position={atom.pos}>
             <mesh
               onPointerDown={(e) => {
                 e.stopPropagation();
-                onSelect(i);
+                onSelect(isSelected ? null : i);
               }}
               scale={isSelected ? 1.18 : 1}
             >
@@ -133,12 +160,38 @@ export default function Molecule3D({
               <Html
                 center
                 distanceFactor={8}
-                position={[0, r + 0.4, 0]}
-                style={{ pointerEvents: "none" }}
+                position={[0, r + 0.5, 0]}
+                zIndexRange={[40, 0]}
+                style={{ pointerEvents: "auto" }}
               >
-                <div className="glass rounded-xl px-3 py-2 text-xs whitespace-nowrap shadow-xl border border-white/10">
-                  <div className="font-semibold neon-text">{data.name}</div>
-                  <div className="text-foreground/70">Symbol: {atom.el}</div>
+                <div
+                  data-atom-tooltip
+                  className="glass rounded-xl px-3 py-2 text-xs shadow-xl border border-white/10 max-w-[220px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold neon-text">{data.name}</div>
+                    <div className="text-[10px] text-foreground/50 font-mono">#{i + 1}</div>
+                  </div>
+                  <div className="text-foreground/70 text-[11px] mt-0.5">Symbol: {atom.el}</div>
+                  {subs.length > 0 && (
+                    <div className="text-foreground/60 text-[10px] mt-1">
+                      Bonded to: {subs.join(", ")}
+                    </div>
+                  )}
+                  {isStereo && (
+                    <div className="mt-2 pt-2 border-t border-white/10">
+                      <div className="text-[10px] uppercase tracking-widest text-[#ffd84d] font-semibold">
+                        Stereogenic centre
+                      </div>
+                      <div className="text-[10px] text-foreground/70 mt-0.5">
+                        {singleStereo ? "Configuration: R / S enantiomers" : "One of multiple stereocentres"}
+                      </div>
+                      <div className="text-[10px] text-foreground/50 mt-0.5">
+                        4 distinct substituents → CIP priority defines R/S.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Html>
             )}

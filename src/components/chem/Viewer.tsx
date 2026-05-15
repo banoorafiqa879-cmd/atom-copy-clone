@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import Builder from "./Builder";
 import IsomerismLab from "./IsomerismLab";
 import StereoLab from "./StereoLab";
+import MobileToolbar from "./MobileToolbar";
 import {
   molecularFormula,
   molecularMass,
@@ -335,111 +336,83 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
         </div>
       )}
 
-      {/* Top-right controls */}
+      {/* Top-right controls — desktop: wrapped grid; mobile: horizontal scroll strip */}
       {!presentation && (
-        <div className="absolute top-16 sm:top-6 right-3 sm:right-6 z-10 flex flex-wrap justify-end gap-1.5 sm:gap-2 max-w-[60vw] sm:max-w-none animate-fade-in">
-          <button
-            onClick={() => setIupacOpen((v) => !v)}
-            className={cn(
-              "glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold",
-              iupacOpen && "neon-glow"
-            )}
-            title="Generate from IUPAC name"
-          >
-            <Wand2 className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
-            <span className="hidden sm:inline">IUPAC</span>
-          </button>
-          <button
-            onClick={() => setBuilderOpen(true)}
-            className="glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold"
-            title="Open Molecule Builder"
-          >
-            <Pencil className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
-            <span className="hidden sm:inline">Build</span>
-          </button>
-          <button
-            onClick={() => { setIsoTab("geometric"); setIsoOpen(true); }}
-            className="glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold"
-            title="Isomerism Lab"
-          >
-            <FlaskConical className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
-            <span className="hidden sm:inline">Isomers</span>
-          </button>
-          <button
-            data-stereolab-launcher
-            onClick={() => setStereoLabOpen((v) => !v)}
-            className={cn(
-              "glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold",
-              stereoLabOpen && "neon-glow",
-            )}
-            title="Stereochemistry Lab"
-          >
-            <Microscope className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
-            <span className="hidden sm:inline">Stereo</span>
-          </button>
-          <button
-            onClick={handleSaveToLibrary}
-            className={cn(
-              "glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold",
-              alreadySaved && "neon-glow",
-            )}
-            title={alreadySaved ? "Already in your library" : "Add to Library"}
-            aria-pressed={alreadySaved}
-          >
-            {alreadySaved ? (
-              <BookmarkCheck className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
-            ) : (
-              <BookmarkPlus className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
-            )}
-            <span className="hidden sm:inline">{alreadySaved ? "Saved" : "Save"}</span>
-          </button>
-          <Link
-            to="/library"
-            className="glass h-11 sm:h-10 px-3 sm:px-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:scale-105 transition text-[11px] sm:text-xs font-semibold"
-            title="Open My Library"
-          >
-            <LibraryIcon className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />
-            <span className="hidden sm:inline">Library</span>
-          </Link>
-          <button
-            onClick={() => setAutoRotate((v) => !v)}
-            className="glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition"
-            title="Auto rotate"
-          >
-            {autoRotate ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-          </button>
-          <button
-            onClick={() => setSpaceFilling((v) => !v)}
-            className={cn(
-              "glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition",
-              spaceFilling && "neon-glow"
-            )}
-            title="Space-filling model"
-          >
-            <Boxes className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setResetKey((k) => k + 1)}
-            className="glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition"
-            title="Fit Molecule (recenter view)"
-          >
-            <Crosshair className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setPresentation(true)}
-            className="glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition hidden sm:flex"
-            title="Presentation mode"
-          >
-            <Presentation className="h-4 w-4" />
-          </button>
-          <button
-            onClick={fullScreen}
-            className="glass h-11 w-11 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center hover:scale-105 transition hidden sm:flex"
-            title="Fullscreen"
-          >
-            <Maximize2 className="h-4 w-4" />
-          </button>
-        </div>
+        <>
+          {/* Desktop toolbar */}
+          <div className="hidden sm:flex absolute top-6 right-6 z-10 flex-wrap justify-end gap-2 animate-fade-in">
+            <button
+              onClick={() => setIupacOpen((v) => !v)}
+              className={cn(
+                "glass h-10 px-3 rounded-xl flex items-center gap-2 hover:scale-105 transition text-xs font-semibold",
+                iupacOpen && "neon-glow"
+              )}
+              title="Generate from IUPAC name"
+            >
+              <Wand2 className="h-4 w-4 text-[hsl(var(--neon-cyan))]" /> IUPAC
+            </button>
+            <button onClick={() => setBuilderOpen(true)} className="glass h-10 px-3 rounded-xl flex items-center gap-2 hover:scale-105 transition text-xs font-semibold" title="Open Molecule Builder">
+              <Pencil className="h-4 w-4 text-[hsl(var(--neon-cyan))]" /> Build
+            </button>
+            <button onClick={() => { setIsoTab("geometric"); setIsoOpen(true); }} className="glass h-10 px-3 rounded-xl flex items-center gap-2 hover:scale-105 transition text-xs font-semibold" title="Isomerism Lab">
+              <FlaskConical className="h-4 w-4 text-[hsl(var(--neon-cyan))]" /> Isomers
+            </button>
+            <button
+              data-stereolab-launcher
+              onClick={() => setStereoLabOpen((v) => !v)}
+              className={cn("glass h-10 px-3 rounded-xl flex items-center gap-2 hover:scale-105 transition text-xs font-semibold", stereoLabOpen && "neon-glow")}
+              title="Stereochemistry Lab"
+            >
+              <Microscope className="h-4 w-4 text-[hsl(var(--neon-cyan))]" /> Stereo
+            </button>
+            <button
+              onClick={handleSaveToLibrary}
+              className={cn("glass h-10 px-3 rounded-xl flex items-center gap-2 hover:scale-105 transition text-xs font-semibold", alreadySaved && "neon-glow")}
+              title={alreadySaved ? "Already in your library" : "Add to Library"}
+              aria-pressed={alreadySaved}
+            >
+              {alreadySaved ? <BookmarkCheck className="h-4 w-4 text-[hsl(var(--neon-cyan))]" /> : <BookmarkPlus className="h-4 w-4 text-[hsl(var(--neon-cyan))]" />}
+              {alreadySaved ? "Saved" : "Save"}
+            </button>
+            <Link to="/library" className="glass h-10 px-3 rounded-xl flex items-center gap-2 hover:scale-105 transition text-xs font-semibold" title="Open My Library">
+              <LibraryIcon className="h-4 w-4 text-[hsl(var(--neon-cyan))]" /> Library
+            </Link>
+            <button onClick={() => setAutoRotate((v) => !v)} className="glass h-10 w-10 rounded-xl flex items-center justify-center hover:scale-105 transition" title="Auto rotate">
+              {autoRotate ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            </button>
+            <button onClick={() => setSpaceFilling((v) => !v)} className={cn("glass h-10 w-10 rounded-xl flex items-center justify-center hover:scale-105 transition", spaceFilling && "neon-glow")} title="Space-filling model">
+              <Boxes className="h-4 w-4" />
+            </button>
+            <button onClick={() => setResetKey((k) => k + 1)} className="glass h-10 w-10 rounded-xl flex items-center justify-center hover:scale-105 transition" title="Fit Molecule">
+              <Crosshair className="h-4 w-4" />
+            </button>
+            <button onClick={() => setPresentation(true)} className="glass h-10 w-10 rounded-xl flex items-center justify-center hover:scale-105 transition" title="Presentation mode">
+              <Presentation className="h-4 w-4" />
+            </button>
+            <button onClick={fullScreen} className="glass h-10 w-10 rounded-xl flex items-center justify-center hover:scale-105 transition" title="Fullscreen">
+              <Maximize2 className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Mobile command strip — primary actions inline + overflow menu */}
+          <MobileToolbar
+            iupacOpen={iupacOpen}
+            stereoLabOpen={stereoLabOpen}
+            alreadySaved={alreadySaved}
+            autoRotate={autoRotate}
+            spaceFilling={spaceFilling}
+            onIUPAC={() => setIupacOpen((v) => !v)}
+            onBuild={() => setBuilderOpen(true)}
+            onIsomers={() => { setIsoTab("geometric"); setIsoOpen(true); }}
+            onStereo={() => setStereoLabOpen((v) => !v)}
+            onSave={handleSaveToLibrary}
+            onAutoRotate={() => setAutoRotate((v) => !v)}
+            onSpaceFill={() => setSpaceFilling((v) => !v)}
+            onFit={() => setResetKey((k) => k + 1)}
+            onPresentation={() => setPresentation(true)}
+            onFullscreen={fullScreen}
+          />
+        </>
       )}
 
       {/* Side nav buttons */}
