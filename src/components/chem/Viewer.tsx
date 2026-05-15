@@ -49,7 +49,7 @@ import {
   geometricIsomerInfo,
   opticalIsomerInfo,
 } from "@/lib/chem-analysis";
-import { stereochemSummary } from "@/lib/stereochem";
+import { stereochemSummary, stereochemSummaryAsync, type StereoSummary } from "@/lib/stereochem";
 
 interface ViewerProps {
   initialMolecule?: Molecule;
@@ -98,10 +98,19 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
   const stereoIdx = useMemo(() => stereocentres(mol), [mol]);
   const geomInfo = useMemo(() => geometricIsomerInfo(mol), [mol]);
   const optInfo = useMemo(() => opticalIsomerInfo(mol), [mol]);
-  const stereoSummary = useMemo(
+  const heuristicSummary = useMemo(
     () => stereochemSummary(mol, planes.length),
     [mol, planes.length],
   );
+  const [stereoSummary, setStereoSummary] = useState<StereoSummary>(heuristicSummary);
+  useEffect(() => {
+    setStereoSummary(heuristicSummary);
+    let cancelled = false;
+    stereochemSummaryAsync(mol)
+      .then((real) => { if (!cancelled) setStereoSummary(real); })
+      .catch(() => { /* keep heuristic fallback */ });
+    return () => { cancelled = true; };
+  }, [mol, heuristicSummary]);
   const info = useMemo(() => ({
     formula: molecularFormula(mol),
     mass: molecularMass(mol),
