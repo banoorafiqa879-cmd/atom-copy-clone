@@ -334,8 +334,54 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-5 flex flex-col">
-          {tab === "geometric" && (
-            geom.reason ? (
+          {tab === "geometric" && (() => {
+            // Unified consistency: Stereo Lab and Isomerism Lab must agree.
+            // If the engine reports 0 geometric isomers, never render isomers
+            // regardless of what the local builder produces. If the engine
+            // reports >0 but the local 3D builder can't enumerate (e.g. ring
+            // alkene), show a consistent fallback that cites the engine count.
+            const engineCount = engineGeometricCount;
+            const engineSites = engineGeomSites;
+            const engineSaysNone = engineCount !== undefined && engineCount === 0;
+            const engineSaysSome = engineCount !== undefined && engineCount > 0;
+            const builderHasIsomers = !geom.reason && !!geom.cis && !!geom.trans;
+
+            if (engineSaysNone) {
+              return (
+                <div className="m-auto max-w-md w-full px-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
+                    <Info className="h-5 w-5 mx-auto mb-2 text-[hsl(var(--neon-cyan))]" />
+                    <div className="text-[10px] uppercase tracking-[0.3em] text-foreground/50 mb-2">No geometrical isomers</div>
+                    <p className="text-xs sm:text-sm text-foreground/80 leading-relaxed">
+                      {geom.reason ?? `The stereochemistry engine found no stereogenic C=C sites in ${molecule.name}, so no cis/trans (E/Z) isomers exist.`}
+                    </p>
+                    <div className="mt-3 text-[11px] text-foreground/50">Try 2-butene, stilbene, or 1,2-dichloroethene.</div>
+                  </div>
+                </div>
+              );
+            }
+
+            if (engineSaysSome && !builderHasIsomers) {
+              return (
+                <div className="m-auto max-w-md w-full px-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
+                    <Info className="h-5 w-5 mx-auto mb-2 text-[hsl(var(--neon-cyan))]" />
+                    <div className="text-[10px] uppercase tracking-[0.3em] text-foreground/50 mb-2">
+                      Ring-constrained stereochemistry
+                    </div>
+                    <div className="text-base font-semibold mb-2">
+                      {engineCount} geometrical isomer{engineCount === 1 ? "" : "s"} predicted
+                    </div>
+                    <p className="text-xs sm:text-sm text-foreground/80 leading-relaxed">
+                      The engine detected {engineSites ?? "ring-bound"} stereogenic C=C site{engineSites === 1 ? "" : "s"} that contribute to geometrical isomerism, but full 3D enumeration of ring-constrained stereoisomers is not yet supported in this viewer. The counts shown in the Stereo Lab remain accurate.
+                    </p>
+                    <div className="mt-3 text-[11px] text-foreground/50">Acyclic alkenes (e.g. 2-butene) render full 3D cis/trans pairs.</div>
+                  </div>
+                </div>
+              );
+            }
+
+            return geom.reason ? (
               <div className="m-auto max-w-md w-full px-2">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
                   <Info className="h-5 w-5 mx-auto mb-2 text-[hsl(var(--neon-cyan))]" />
