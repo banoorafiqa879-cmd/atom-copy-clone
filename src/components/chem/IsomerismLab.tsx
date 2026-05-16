@@ -215,7 +215,7 @@ function enantiomerLabels(centers: number): { a: string; b: string; aSub: string
   return { a: "Enantiomer A", b: "Enantiomer B", aSub: `${centers} stereocentres`, bSub: "all inverted" };
 }
 
-export default function IsomerismLab({ molecule, onClose, initialTab = "geometric", stereoCenters, isMeso, classification }: Props) {
+export default function IsomerismLab({ molecule, onClose, initialTab = "geometric", stereoCenters, isMeso, classification, engineGeometricCount, engineGeomSites }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [dihedral, setDihedral] = useState(60);
   const [bondIdx, setBondIdx] = useState(0);
