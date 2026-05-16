@@ -63,7 +63,24 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
   const [index, setIndex] = useState(() =>
     initialMolecule ? MOLECULES.length : 0,
   );
-  const [autoRotate, setAutoRotate] = useState(true);
+  const [autoRotate, setAutoRotate] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try { return sessionStorage.getItem("atom-forge:auto-rotate") === "1"; } catch { return false; }
+  });
+  const [rotateSpeed, setRotateSpeed] = useState<number>(() => {
+    if (typeof window === "undefined") return 0.4;
+    try {
+      const v = parseFloat(sessionStorage.getItem("atom-forge:rotate-speed") ?? "0.4");
+      return isFinite(v) && v >= 0 ? v : 0.4;
+    } catch { return 0.4; }
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem("atom-forge:auto-rotate", autoRotate ? "1" : "0"); } catch { /* ignore */ }
+  }, [autoRotate]);
+  useEffect(() => {
+    try { sessionStorage.setItem("atom-forge:rotate-speed", String(rotateSpeed)); } catch { /* ignore */ }
+  }, [rotateSpeed]);
+  const [speedOpen, setSpeedOpen] = useState(false);
   const [spaceFilling, setSpaceFilling] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [presentation, setPresentation] = useState(false);
