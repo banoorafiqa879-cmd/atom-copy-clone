@@ -443,8 +443,8 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
                   </div>
                 ))}
               </div>
-            )
-          )}
+            );
+          })()}
 
           {tab === "optical" && (() => {
             const centers = stereoCenters ?? stereo.length;
