@@ -303,6 +303,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
             molecule={mol}
             spaceFilling={spaceFilling}
             autoRotate={autoRotate}
+            rotateSpeed={rotateSpeed}
             selected={selected}
             onSelect={setSelected}
             showPOS={showPOS}
