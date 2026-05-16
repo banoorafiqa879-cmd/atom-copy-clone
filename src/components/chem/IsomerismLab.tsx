@@ -29,6 +29,10 @@ interface Props {
   stereoCenters?: number;
   isMeso?: boolean;
   classification?: "achiral" | "chiral-single" | "chiral-multi" | "meso";
+  /** Engine's geometric isomer count (for cross-module consistency with Stereo Lab). */
+  engineGeometricCount?: number;
+  /** Engine's count of stereogenic C=C sites. */
+  engineGeomSites?: number;
 }
 
 /** True if removing this bond still leaves a path between its endpoints (i.e. it's a ring bond). */
