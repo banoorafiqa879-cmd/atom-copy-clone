@@ -10,6 +10,7 @@ interface Props {
   molecule: Molecule;
   spaceFilling: boolean;
   autoRotate: boolean;
+  rotateSpeed?: number;
   selected: number | null;
   onSelect: (i: number | null) => void;
   showPOS?: boolean;
