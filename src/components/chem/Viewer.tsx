@@ -947,6 +947,8 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           stereoCenters={stereoSummary.centres.length}
           isMeso={stereoSummary.isMeso}
           classification={stereoSummary.classification}
+          engineGeometricCount={stereoSummary.geometricIsomers}
+          engineGeomSites={stereoSummary.geomSites}
         />
       )}
 
