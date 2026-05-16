@@ -63,7 +63,24 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
   const [index, setIndex] = useState(() =>
     initialMolecule ? MOLECULES.length : 0,
   );
-  const [autoRotate, setAutoRotate] = useState(true);
+  const [autoRotate, setAutoRotate] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try { return sessionStorage.getItem("atom-forge:auto-rotate") === "1"; } catch { return false; }
+  });
+  const [rotateSpeed, setRotateSpeed] = useState<number>(() => {
+    if (typeof window === "undefined") return 0.4;
+    try {
+      const v = parseFloat(sessionStorage.getItem("atom-forge:rotate-speed") ?? "0.4");
+      return isFinite(v) && v >= 0 ? v : 0.4;
+    } catch { return 0.4; }
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem("atom-forge:auto-rotate", autoRotate ? "1" : "0"); } catch { /* ignore */ }
+  }, [autoRotate]);
+  useEffect(() => {
+    try { sessionStorage.setItem("atom-forge:rotate-speed", String(rotateSpeed)); } catch { /* ignore */ }
+  }, [rotateSpeed]);
+  const [speedOpen, setSpeedOpen] = useState(false);
   const [spaceFilling, setSpaceFilling] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [presentation, setPresentation] = useState(false);
@@ -286,6 +303,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
             molecule={mol}
             spaceFilling={spaceFilling}
             autoRotate={autoRotate}
+            rotateSpeed={rotateSpeed}
             selected={selected}
             onSelect={setSelected}
             showPOS={showPOS}
@@ -377,9 +395,46 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
             <Link to="/library" className="glass h-10 px-3 rounded-xl flex items-center gap-2 hover:scale-105 transition text-xs font-semibold" title="Open My Library">
               <LibraryIcon className="h-4 w-4 text-[hsl(var(--neon-cyan))]" /> Library
             </Link>
-            <button onClick={() => setAutoRotate((v) => !v)} className="glass h-10 w-10 rounded-xl flex items-center justify-center hover:scale-105 transition" title="Auto rotate">
-              {autoRotate ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setAutoRotate((v) => !v)}
+                onContextMenu={(e) => { e.preventDefault(); setSpeedOpen((v) => !v); }}
+                className={cn(
+                  "glass h-10 px-3 rounded-xl flex items-center gap-1.5 hover:scale-105 transition text-[11px] font-semibold",
+                  autoRotate && "neon-glow",
+                )}
+                title={autoRotate ? "Auto-rotate ON (right-click for speed)" : "Auto-rotate OFF"}
+                aria-pressed={autoRotate}
+              >
+                {autoRotate ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                <span>{autoRotate ? "ON" : "OFF"}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSpeedOpen((v) => !v); }}
+                  className="ml-0.5 opacity-60 hover:opacity-100 text-[9px]"
+                  aria-label="Rotation speed"
+                  type="button"
+                >
+                  ▾
+                </button>
+              </button>
+              {speedOpen && (
+                <div className="absolute top-[calc(100%+8px)] right-0 glass rounded-xl border border-white/10 p-3 w-56 z-30 animate-fade-in">
+                  <div className="text-[10px] uppercase tracking-widest text-foreground/50 mb-1.5 flex items-center justify-between">
+                    <span>Rotation speed</span>
+                    <span className="font-mono text-foreground/70">{rotateSpeed.toFixed(1)}×</span>
+                  </div>
+                  <input
+                    type="range" min={0.1} max={2} step={0.1}
+                    value={rotateSpeed}
+                    onChange={(e) => setRotateSpeed(parseFloat(e.target.value))}
+                    className="w-full accent-[hsl(var(--neon-cyan))]"
+                  />
+                  <div className="flex justify-between text-[9px] text-foreground/40 mt-1">
+                    <span>Slow</span><span>Fast</span>
+                  </div>
+                </div>
+              )}
+            </div>
             <button onClick={() => setSpaceFilling((v) => !v)} className={cn("glass h-10 w-10 rounded-xl flex items-center justify-center hover:scale-105 transition", spaceFilling && "neon-glow")} title="Space-filling model">
               <Boxes className="h-4 w-4" />
             </button>
@@ -892,6 +947,8 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           stereoCenters={stereoSummary.centres.length}
           isMeso={stereoSummary.isMeso}
           classification={stereoSummary.classification}
+          engineGeometricCount={stereoSummary.geometricIsomers}
+          engineGeomSites={stereoSummary.geomSites}
         />
       )}
 

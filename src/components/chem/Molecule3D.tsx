@@ -10,6 +10,7 @@ interface Props {
   molecule: Molecule;
   spaceFilling: boolean;
   autoRotate: boolean;
+  rotateSpeed?: number;
   selected: number | null;
   onSelect: (i: number | null) => void;
   showPOS?: boolean;
@@ -63,6 +64,7 @@ export default function Molecule3D({
   molecule,
   spaceFilling,
   autoRotate,
+  rotateSpeed = 0.4,
   selected,
   onSelect,
   showPOS,
@@ -83,7 +85,7 @@ export default function Molecule3D({
 
   useFrame((_, delta) => {
     if (group.current && autoRotate) {
-      group.current.rotation.y += delta * 0.4;
+      group.current.rotation.y += delta * rotateSpeed;
     }
   });
 
