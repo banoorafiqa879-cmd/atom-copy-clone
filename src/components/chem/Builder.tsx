@@ -719,6 +719,13 @@ export default function Builder({ onClose, onGenerate }: Props) {
           </div>
         </div>
       </div>
+      {ptOpen && (
+        <PeriodicTable
+          current={tool.kind === "atom" ? tool.el : "C"}
+          onSelect={(el) => { setTool({ kind: "atom", el }); setPtOpen(false); }}
+          onClose={() => setPtOpen(false)}
+        />
+      )}
     </div>
   );
 }
