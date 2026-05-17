@@ -735,6 +735,25 @@ export default function Builder({ onClose, onGenerate }: Props) {
                 <Trash2 className="h-3.5 w-3.5" /> Clear canvas
               </button>
             </div>
+            <div>
+              <div className="text-[9px] uppercase tracking-widest text-foreground/50 mb-1.5">Presets (QA / teaching)</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([
+                  ["ethanol", "Ethanol"],
+                  ["acetic-acid", "Acetic acid"],
+                  ["2-butanol", "2-Butanol"],
+                  ["benzene", "Benzene"],
+                  ["chlorobenzene", "Chlorobenzene"],
+                  ["cyclohexene", "Cyclohexene"],
+                ] as const).map(([k, label]) => (
+                  <button key={k}
+                    onClick={() => loadPreset(k)}
+                    className="h-8 rounded-lg border border-white/10 text-[10px] hover:border-[hsl(var(--neon-cyan))]/50 hover:scale-105 active:scale-95 transition">
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="text-[10px] text-foreground/40 leading-relaxed border-t border-white/5 pt-2">
               <b>Tips:</b> Drag any atom to move. Bond tool: drag from one atom to another to bond — drag to empty space to add a new C. Drop a ring on an existing edge to <b>fuse</b>. Pinch to zoom.
             </div>
