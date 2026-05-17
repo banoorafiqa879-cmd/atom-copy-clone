@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   X, Undo2, Redo2, Trash2, Eraser, MousePointer2, Sparkles, Loader2,
-  Hexagon, Pentagon, Triangle, Square, Move, Hand, ZoomIn, ZoomOut,
+  Hexagon, Pentagon, Triangle, Square, Hand, Atom as AtomIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import PeriodicTable from "./PeriodicTable";
 import { ELEMENT_DATA, type Element, type Molecule } from "@/data/molecules";
 
 type BondOrder = 1 | 2 | 3;
