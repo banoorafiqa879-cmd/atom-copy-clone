@@ -138,6 +138,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
   const [history, setHistory] = useState<State[]>([]);
   const [future, setFuture] = useState<State[]>([]);
   const [busy, setBusy] = useState(false);
+  const [ptOpen, setPtOpen] = useState(false);
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const [drag, setDrag] = useState<
     | { kind: "node"; id: number; ox: number; oy: number }
