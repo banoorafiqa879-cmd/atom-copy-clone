@@ -456,6 +456,8 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
             alreadySaved={alreadySaved}
             autoRotate={autoRotate}
             spaceFilling={spaceFilling}
+            rotateSpeed={rotateSpeed}
+            onRotateSpeed={setRotateSpeed}
             onIUPAC={() => setIupacOpen((v) => !v)}
             onBuild={() => setBuilderOpen(true)}
             onIsomers={() => { setIsoTab("geometric"); setIsoOpen(true); }}
