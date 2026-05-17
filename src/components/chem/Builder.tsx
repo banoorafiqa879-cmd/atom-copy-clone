@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   X, Undo2, Redo2, Trash2, Eraser, MousePointer2, Sparkles, Loader2,
-  Hexagon, Pentagon, Triangle, Square, Move, Hand, ZoomIn, ZoomOut,
+  Hexagon, Pentagon, Triangle, Square, Hand, Atom as AtomIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import PeriodicTable from "./PeriodicTable";
 import { ELEMENT_DATA, type Element, type Molecule } from "@/data/molecules";
 
 type BondOrder = 1 | 2 | 3;
@@ -22,7 +23,7 @@ interface State { nodes: NodeA[]; edges: EdgeB[] }
 const ATOMS: Element[] = ["C", "H", "O", "N", "Cl", "Br", "F", "S"];
 const VALENCE: Record<Element, number> = { H: 1, C: 4, N: 3, O: 2, F: 1, Cl: 1, Br: 1, S: 2 };
 const BOND_LEN = 46;
-const SNAP = 22;
+const SNAP = 26;
 
 let _id = 1;
 const nid = () => _id++;
@@ -111,7 +112,7 @@ function nodeAt(state: State, x: number, y: number, r = SNAP) {
   return best;
 }
 
-function edgeAt(state: State, x: number, y: number, r = 8) {
+function edgeAt(state: State, x: number, y: number, r = 16) {
   for (const e of state.edges) {
     const a = state.nodes.find(n => n.id === e.a);
     const b = state.nodes.find(n => n.id === e.b);
@@ -137,6 +138,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
   const [history, setHistory] = useState<State[]>([]);
   const [future, setFuture] = useState<State[]>([]);
   const [busy, setBusy] = useState(false);
+  const [ptOpen, setPtOpen] = useState(false);
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const [drag, setDrag] = useState<
     | { kind: "node"; id: number; ox: number; oy: number }
@@ -601,11 +603,20 @@ export default function Builder({ onClose, onGenerate }: Props) {
           {/* Sidebar */}
           <div className="p-3 border-b md:border-b-0 md:border-r border-white/10 space-y-3 max-h-[34vh] md:max-h-none overflow-y-auto">
             <div>
-              <div className="text-[9px] uppercase tracking-widest text-foreground/50 mb-1.5">Atoms</div>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[9px] uppercase tracking-widest text-foreground/50">Atoms</div>
+                <button
+                  onClick={() => setPtOpen(true)}
+                  className="text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-[hsl(var(--neon-cyan))]/40 text-[hsl(var(--neon-cyan))] hover:bg-[hsl(var(--neon-cyan))]/10 active:scale-95 transition flex items-center gap-1"
+                  title="Open periodic table"
+                >
+                  <AtomIcon className="h-3 w-3" /> Table
+                </button>
+              </div>
               <div className="grid grid-cols-4 gap-1.5">
                 {ATOMS.map(el => (
                   <button key={el} onClick={() => setTool({ kind: "atom", el })}
-                    className={cn("h-9 rounded-lg text-xs font-bold border border-white/10 transition hover:scale-105",
+                    className={cn("h-10 rounded-lg text-xs font-bold border border-white/10 transition active:scale-95 hover:scale-105",
                       tool.kind === "atom" && tool.el === el && "neon-glow border-[hsl(var(--neon-cyan))]/60")}
                     style={{ color: ELEMENT_DATA[el].color }} title={ELEMENT_DATA[el].name}>{el}</button>
                 ))}
@@ -708,6 +719,13 @@ export default function Builder({ onClose, onGenerate }: Props) {
           </div>
         </div>
       </div>
+      {ptOpen && (
+        <PeriodicTable
+          current={tool.kind === "atom" ? tool.el : "C"}
+          onSelect={(el) => { setTool({ kind: "atom", el }); setPtOpen(false); }}
+          onClose={() => setPtOpen(false)}
+        />
+      )}
     </div>
   );
 }
