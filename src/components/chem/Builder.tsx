@@ -23,7 +23,7 @@ interface State { nodes: NodeA[]; edges: EdgeB[] }
 const ATOMS: Element[] = ["C", "H", "O", "N", "Cl", "Br", "F", "S"];
 const VALENCE: Record<Element, number> = { H: 1, C: 4, N: 3, O: 2, F: 1, Cl: 1, Br: 1, S: 2 };
 const BOND_LEN = 46;
-const SNAP = 22;
+const SNAP = 26;
 
 let _id = 1;
 const nid = () => _id++;
