@@ -418,14 +418,31 @@ export default function Builder({ onClose, onGenerate }: Props) {
       // exclude self
       if (target && target.id === fromNode.id) target = null;
       if (!target) {
-        // Place new C atom at end (snap length)
+        // Place new C atom at end. If user just tapped (no drag) so L≈0,
+        // pick a direction that avoids overlapping existing neighbours.
         const dx = w.x - fromNode.x, dy = w.y - fromNode.y;
-        const L = Math.hypot(dx, dy) || 1;
-        const ux = dx / L, uy = dy / L;
-        const ex = fromNode.x + ux * Math.max(BOND_LEN, L);
-        const ey = fromNode.y + uy * Math.max(BOND_LEN, L);
+        const L = Math.hypot(dx, dy);
+        let ux: number, uy: number, dist: number;
+        if (L < 6) {
+          // Tap on atom — compute neighbour-averaged outward direction.
+          let nbx = 0, nby = 0, count = 0;
+          for (const ed of next.edges) {
+            const other = ed.a === fromNode.id ? next.nodes.find(n => n.id === ed.b)
+                       : ed.b === fromNode.id ? next.nodes.find(n => n.id === ed.a) : null;
+            if (other) { nbx += other.x - fromNode.x; nby += other.y - fromNode.y; count++; }
+          }
+          if (count === 0) { ux = 1; uy = 0; }
+          else {
+            const ang = Math.atan2(-nby, -nbx); // opposite of neighbour centroid
+            ux = Math.cos(ang); uy = Math.sin(ang);
+          }
+          dist = BOND_LEN;
+        } else {
+          ux = dx / L; uy = dy / L;
+          dist = Math.max(BOND_LEN, L);
+        }
         const id = nid();
-        next.nodes.push({ id, el: "C", x: ex, y: ey });
+        next.nodes.push({ id, el: "C", x: fromNode.x + ux * dist, y: fromNode.y + uy * dist });
         target = next.nodes[next.nodes.length - 1];
       }
       // avoid duplicate; if exists, cycle order
