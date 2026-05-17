@@ -125,7 +125,7 @@ export default function MobileToolbar(p: Props) {
             ref={sheetRef}
             role="dialog"
             aria-modal="true"
-            className="absolute left-0 right-0 bottom-0 glass border-t border-white/10 rounded-t-3xl p-4 pb-7 max-h-[80vh] overflow-y-auto animate-slide-up bg-background/95 backdrop-blur-2xl"
+            className="absolute left-0 right-0 bottom-0 glass border-t border-white/10 rounded-t-3xl p-4 pb-7 max-h-[80vh] overflow-y-auto animate-fade-in bg-background/95 backdrop-blur-2xl"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(var(--neon-cyan))]">
