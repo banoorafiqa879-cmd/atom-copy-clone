@@ -603,11 +603,20 @@ export default function Builder({ onClose, onGenerate }: Props) {
           {/* Sidebar */}
           <div className="p-3 border-b md:border-b-0 md:border-r border-white/10 space-y-3 max-h-[34vh] md:max-h-none overflow-y-auto">
             <div>
-              <div className="text-[9px] uppercase tracking-widest text-foreground/50 mb-1.5">Atoms</div>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[9px] uppercase tracking-widest text-foreground/50">Atoms</div>
+                <button
+                  onClick={() => setPtOpen(true)}
+                  className="text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-[hsl(var(--neon-cyan))]/40 text-[hsl(var(--neon-cyan))] hover:bg-[hsl(var(--neon-cyan))]/10 active:scale-95 transition flex items-center gap-1"
+                  title="Open periodic table"
+                >
+                  <AtomIcon className="h-3 w-3" /> Table
+                </button>
+              </div>
               <div className="grid grid-cols-4 gap-1.5">
                 {ATOMS.map(el => (
                   <button key={el} onClick={() => setTool({ kind: "atom", el })}
-                    className={cn("h-9 rounded-lg text-xs font-bold border border-white/10 transition hover:scale-105",
+                    className={cn("h-10 rounded-lg text-xs font-bold border border-white/10 transition active:scale-95 hover:scale-105",
                       tool.kind === "atom" && tool.el === el && "neon-glow border-[hsl(var(--neon-cyan))]/60")}
                     style={{ color: ELEMENT_DATA[el].color }} title={ELEMENT_DATA[el].name}>{el}</button>
                 ))}
