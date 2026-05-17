@@ -155,6 +155,58 @@ export default function Builder({ onClose, onGenerate }: Props) {
   const f = useMemo(() => formula(state), [state]);
   const heavyCount = state.nodes.filter(n => n.el !== "H").length;
 
+  // One-tap QA / teaching presets
+  const loadPreset = (name: "ethanol" | "acetic-acid" | "2-butanol" | "benzene" | "chlorobenzene" | "cyclohexene") => {
+    const cx = 200, cy = 200;
+    const mk = (el: Element, x: number, y: number): NodeA => ({ id: nid(), el, x, y });
+    let nodes: NodeA[] = [];
+    const edges: EdgeB[] = [];
+    if (name === "ethanol") {
+      const a = [mk("C", cx - BOND_LEN, cy), mk("C", cx, cy), mk("O", cx + BOND_LEN, cy)];
+      nodes = a;
+      edges.push({ id: nid(), a: a[0].id, b: a[1].id, order: 1 });
+      edges.push({ id: nid(), a: a[1].id, b: a[2].id, order: 1 });
+    } else if (name === "acetic-acid") {
+      const a = [mk("C", cx - BOND_LEN, cy), mk("C", cx, cy),
+                 mk("O", cx + BOND_LEN * 0.5, cy - BOND_LEN * 0.86), mk("O", cx + BOND_LEN, cy)];
+      nodes = a;
+      edges.push({ id: nid(), a: a[0].id, b: a[1].id, order: 1 });
+      edges.push({ id: nid(), a: a[1].id, b: a[2].id, order: 2 });
+      edges.push({ id: nid(), a: a[1].id, b: a[3].id, order: 1 });
+    } else if (name === "2-butanol") {
+      const a = [mk("C", cx - BOND_LEN * 1.5, cy), mk("C", cx - BOND_LEN * 0.5, cy),
+                 mk("C", cx + BOND_LEN * 0.5, cy), mk("C", cx + BOND_LEN * 1.5, cy),
+                 mk("O", cx - BOND_LEN * 0.5, cy - BOND_LEN)];
+      nodes = a;
+      edges.push({ id: nid(), a: a[0].id, b: a[1].id, order: 1 });
+      edges.push({ id: nid(), a: a[1].id, b: a[2].id, order: 1 });
+      edges.push({ id: nid(), a: a[2].id, b: a[3].id, order: 1 });
+      edges.push({ id: nid(), a: a[1].id, b: a[4].id, order: 1 });
+    } else {
+      const r = (BOND_LEN / 2) / Math.sin(Math.PI / 6);
+      const ring: NodeA[] = [];
+      for (let i = 0; i < 6; i++) {
+        const ang = -Math.PI / 2 + (i / 6) * Math.PI * 2;
+        ring.push(mk("C", cx + Math.cos(ang) * r, cy + Math.sin(ang) * r));
+      }
+      nodes = [...ring];
+      const aromatic = name === "benzene" || name === "chlorobenzene";
+      for (let i = 0; i < 6; i++) {
+        let order: BondOrder = 1;
+        if (aromatic) order = i % 2 === 0 ? 2 : 1;
+        else if (name === "cyclohexene" && i === 0) order = 2;
+        edges.push({ id: nid(), a: ring[i].id, b: ring[(i + 1) % 6].id, order });
+      }
+      if (name === "chlorobenzene") {
+        const a0 = -Math.PI / 2;
+        const cl = mk("Cl", cx + Math.cos(a0) * (r + BOND_LEN), cy + Math.sin(a0) * (r + BOND_LEN));
+        nodes.push(cl);
+        edges.push({ id: nid(), a: ring[0].id, b: cl.id, order: 1 });
+      }
+    }
+    commit({ nodes, edges });
+  };
+
   const commit = useCallback((next: State) => {
     setHistory(h => [...h.slice(-50), state]);
     setFuture([]);
@@ -418,14 +470,31 @@ export default function Builder({ onClose, onGenerate }: Props) {
       // exclude self
       if (target && target.id === fromNode.id) target = null;
       if (!target) {
-        // Place new C atom at end (snap length)
+        // Place new C atom at end. If user just tapped (no drag) so L≈0,
+        // pick a direction that avoids overlapping existing neighbours.
         const dx = w.x - fromNode.x, dy = w.y - fromNode.y;
-        const L = Math.hypot(dx, dy) || 1;
-        const ux = dx / L, uy = dy / L;
-        const ex = fromNode.x + ux * Math.max(BOND_LEN, L);
-        const ey = fromNode.y + uy * Math.max(BOND_LEN, L);
+        const L = Math.hypot(dx, dy);
+        let ux: number, uy: number, dist: number;
+        if (L < 6) {
+          // Tap on atom — compute neighbour-averaged outward direction.
+          let nbx = 0, nby = 0, count = 0;
+          for (const ed of next.edges) {
+            const other = ed.a === fromNode.id ? next.nodes.find(n => n.id === ed.b)
+                       : ed.b === fromNode.id ? next.nodes.find(n => n.id === ed.a) : null;
+            if (other) { nbx += other.x - fromNode.x; nby += other.y - fromNode.y; count++; }
+          }
+          if (count === 0) { ux = 1; uy = 0; }
+          else {
+            const ang = Math.atan2(-nby, -nbx); // opposite of neighbour centroid
+            ux = Math.cos(ang); uy = Math.sin(ang);
+          }
+          dist = BOND_LEN;
+        } else {
+          ux = dx / L; uy = dy / L;
+          dist = Math.max(BOND_LEN, L);
+        }
         const id = nid();
-        next.nodes.push({ id, el: "C", x: ex, y: ey });
+        next.nodes.push({ id, el: "C", x: fromNode.x + ux * dist, y: fromNode.y + uy * dist });
         target = next.nodes[next.nodes.length - 1];
       }
       // avoid duplicate; if exists, cycle order
@@ -665,6 +734,25 @@ export default function Builder({ onClose, onGenerate }: Props) {
               <button onClick={clear} className="mt-1.5 w-full h-9 rounded-lg border border-white/10 flex items-center justify-center gap-1.5 text-[11px] hover:border-red-400/40 hover:text-red-300 transition">
                 <Trash2 className="h-3.5 w-3.5" /> Clear canvas
               </button>
+            </div>
+            <div>
+              <div className="text-[9px] uppercase tracking-widest text-foreground/50 mb-1.5">Presets (QA / teaching)</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([
+                  ["ethanol", "Ethanol"],
+                  ["acetic-acid", "Acetic acid"],
+                  ["2-butanol", "2-Butanol"],
+                  ["benzene", "Benzene"],
+                  ["chlorobenzene", "Chlorobenzene"],
+                  ["cyclohexene", "Cyclohexene"],
+                ] as const).map(([k, label]) => (
+                  <button key={k}
+                    onClick={() => loadPreset(k)}
+                    className="h-8 rounded-lg border border-white/10 text-[10px] hover:border-[hsl(var(--neon-cyan))]/50 hover:scale-105 active:scale-95 transition">
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="text-[10px] text-foreground/40 leading-relaxed border-t border-white/5 pt-2">
               <b>Tips:</b> Drag any atom to move. Bond tool: drag from one atom to another to bond — drag to empty space to add a new C. Drop a ring on an existing edge to <b>fuse</b>. Pinch to zoom.

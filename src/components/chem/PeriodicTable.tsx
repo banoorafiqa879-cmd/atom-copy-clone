@@ -133,7 +133,7 @@ export default function PeriodicTable({ current, onSelect, onClose }: Props) {
             ))}
           </div>
           <p className="mt-3 text-[10px] text-foreground/50 leading-relaxed">
-            Active elements <span className="text-foreground/80 font-semibold">H, C, N, O, F, S, Cl, Br</span> are fully supported in the 3D engine. Greyed elements are exposed for educational reference — full geometry/valence support for the remaining periodic table is being added in a future release.
+            <span className="text-amber-300/90 font-semibold">Engine limitation:</span> the 3D builder currently supports only <span className="text-foreground/80 font-semibold">H, C, N, O, F, S, Cl, Br</span>. Greyed elements are shown for educational reference but cannot yet be placed — full valence/geometry support for the remaining periodic table is on the roadmap.
           </p>
         </div>
       </div>
