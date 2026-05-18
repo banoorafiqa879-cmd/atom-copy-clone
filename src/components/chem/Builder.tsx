@@ -593,21 +593,29 @@ export default function Builder({ onClose, onGenerate }: Props) {
   const renderNodes = () => state.nodes.map(n => {
     const showLabel = n.el !== "C" || state.edges.filter(e => e.a === n.id || e.b === n.id).length === 0;
     const isSel = selected?.kind === "node" && selected.id === n.id;
+    const isBondSource = drag?.kind === "bond-from" && drag.id === n.id;
+    const isPendingBond = pendingBond === n.id;
+    const ringStroke = isSel ? "hsl(var(--neon-cyan))"
+      : isBondSource || isPendingBond ? "hsl(var(--neon-magenta))"
+      : null;
     const color = ELEMENT_DATA[n.el].color;
     return (
       <g key={n.id} style={{ cursor: "grab" }}>
+        {(isBondSource || isPendingBond) && (
+          <circle cx={n.x} cy={n.y} r={16} fill="none" stroke="hsl(var(--neon-magenta))" strokeWidth={1.4} strokeDasharray="3 3" opacity={0.8} />
+        )}
         {showLabel ? (
           <>
-            <circle cx={n.x} cy={n.y} r={11} fill="#0b0d18" stroke={isSel ? "hsl(var(--neon-cyan))" : color} strokeWidth={isSel ? 2.4 : 1.4} />
+            <circle cx={n.x} cy={n.y} r={11} fill="#0b0d18" stroke={ringStroke ?? color} strokeWidth={ringStroke ? 2.4 : 1.4} />
             <text x={n.x} y={n.y + 4} textAnchor="middle" fontSize={n.el.length > 1 ? 10 : 12} fontWeight={700} fill={color}>
               {n.el}
             </text>
           </>
         ) : (
-          <circle cx={n.x} cy={n.y} r={isSel ? 5 : 2.5} fill={isSel ? "hsl(var(--neon-cyan))" : "transparent"} />
+          <circle cx={n.x} cy={n.y} r={isSel ? 5 : 2.5} fill={ringStroke ?? "transparent"} />
         )}
-        {/* hit area */}
-        <circle cx={n.x} cy={n.y} r={16} fill="transparent" />
+        {/* enlarged touch hit area */}
+        <circle cx={n.x} cy={n.y} r={NODE_HIT} fill="transparent" />
       </g>
     );
   });
