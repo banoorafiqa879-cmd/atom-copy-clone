@@ -23,7 +23,11 @@ interface State { nodes: NodeA[]; edges: EdgeB[] }
 const ATOMS: Element[] = ["C", "H", "O", "N", "Cl", "Br", "F", "S"];
 const VALENCE: Record<Element, number> = { H: 1, C: 4, N: 3, O: 2, F: 1, Cl: 1, Br: 1, S: 2 };
 const BOND_LEN = 46;
-const SNAP = 26;
+// Touch-friendly hit radii — large enough for finger taps without
+// causing wrong-atom selection in dense ring structures.
+const SNAP = 32;
+const EDGE_HIT = 22;
+const NODE_HIT = 22;
 
 let _id = 1;
 const nid = () => _id++;
