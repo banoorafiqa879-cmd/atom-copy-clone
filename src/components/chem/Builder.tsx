@@ -23,7 +23,11 @@ interface State { nodes: NodeA[]; edges: EdgeB[] }
 const ATOMS: Element[] = ["C", "H", "O", "N", "Cl", "Br", "F", "S"];
 const VALENCE: Record<Element, number> = { H: 1, C: 4, N: 3, O: 2, F: 1, Cl: 1, Br: 1, S: 2 };
 const BOND_LEN = 46;
-const SNAP = 26;
+// Touch-friendly hit radii — large enough for finger taps without
+// causing wrong-atom selection in dense ring structures.
+const SNAP = 32;
+const EDGE_HIT = 22;
+const NODE_HIT = 22;
 
 let _id = 1;
 const nid = () => _id++;
@@ -112,7 +116,7 @@ function nodeAt(state: State, x: number, y: number, r = SNAP) {
   return best;
 }
 
-function edgeAt(state: State, x: number, y: number, r = 16) {
+function edgeAt(state: State, x: number, y: number, r = EDGE_HIT) {
   for (const e of state.edges) {
     const a = state.nodes.find(n => n.id === e.a);
     const b = state.nodes.find(n => n.id === e.b);
@@ -148,6 +152,10 @@ export default function Builder({ onClose, onGenerate }: Props) {
     | null
   >(null);
   const [selected, setSelected] = useState<{ kind: "node" | "edge"; id: number } | null>(null);
+  // Two-step bond mode: first tap stores source atom id; second tap on
+  // another atom creates the bond. Reliable on mobile vs. drag accuracy.
+  const [pendingBond, setPendingBond] = useState<number | null>(null);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchRef = useRef<{ d: number; k: number; cx: number; cy: number; vx: number; vy: number } | null>(null);
@@ -312,6 +320,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    pointerStart.current = { x: e.clientX, y: e.clientY };
 
     if (pointers.current.size === 2) {
       // start pinch
@@ -466,9 +475,39 @@ export default function Builder({ onClose, onGenerate }: Props) {
       const next = clone(state);
       const fromNode = next.nodes.find(n => n.id === drag.id);
       if (!fromNode) { setDrag(null); return; }
+
+      // Detect "tap, no drag" so we can offer two-step tap-to-bond on mobile.
+      const startPx = pointerStart.current;
+      const movedPx = startPx ? Math.hypot(e.clientX - startPx.x, e.clientY - startPx.y) : 0;
+      const isTap = movedPx < 6;
+
       let target = nodeAt(next, w.x, w.y);
-      // exclude self
       if (target && target.id === fromNode.id) target = null;
+
+      if (isTap && !target) {
+        // First tap on an atom → arm pending bond. Second tap on another atom completes it.
+        if (pendingBond !== null && pendingBond !== fromNode.id) {
+          const src = next.nodes.find(n => n.id === pendingBond);
+          if (src) {
+            const existing = next.edges.find(
+              ed => (ed.a === src.id && ed.b === fromNode.id) || (ed.b === src.id && ed.a === fromNode.id),
+            );
+            if (existing) existing.order = tool.order;
+            else next.edges.push({ id: nid(), a: src.id, b: fromNode.id, order: tool.order });
+            commit(next);
+            setPendingBond(null);
+            setDrag(null);
+            return;
+          }
+        }
+        setPendingBond(fromNode.id);
+        setDrag(null);
+        return;
+      }
+
+      // Any committing action clears pending state.
+      setPendingBond(null);
+
       if (!target) {
         // Place new C atom at end. If user just tapped (no drag) so L≈0,
         // pick a direction that avoids overlapping existing neighbours.
@@ -476,7 +515,6 @@ export default function Builder({ onClose, onGenerate }: Props) {
         const L = Math.hypot(dx, dy);
         let ux: number, uy: number, dist: number;
         if (L < 6) {
-          // Tap on atom — compute neighbour-averaged outward direction.
           let nbx = 0, nby = 0, count = 0;
           for (const ed of next.edges) {
             const other = ed.a === fromNode.id ? next.nodes.find(n => n.id === ed.b)
@@ -485,7 +523,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
           }
           if (count === 0) { ux = 1; uy = 0; }
           else {
-            const ang = Math.atan2(-nby, -nbx); // opposite of neighbour centroid
+            const ang = Math.atan2(-nby, -nbx);
             ux = Math.cos(ang); uy = Math.sin(ang);
           }
           dist = BOND_LEN;
@@ -497,7 +535,6 @@ export default function Builder({ onClose, onGenerate }: Props) {
         next.nodes.push({ id, el: "C", x: fromNode.x + ux * dist, y: fromNode.y + uy * dist });
         target = next.nodes[next.nodes.length - 1];
       }
-      // avoid duplicate; if exists, cycle order
       const existing = next.edges.find(
         e => (e.a === fromNode.id && e.b === target!.id) || (e.b === fromNode.id && e.a === target!.id),
       );
@@ -573,7 +610,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
     return (
       <g key={e.id}>
         {/* hit area */}
-        <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={14} />
+        <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={22} />
         {offsets.map((o, i) => (
           <line key={i}
             x1={a.x + nx * o} y1={a.y + ny * o}
@@ -589,21 +626,29 @@ export default function Builder({ onClose, onGenerate }: Props) {
   const renderNodes = () => state.nodes.map(n => {
     const showLabel = n.el !== "C" || state.edges.filter(e => e.a === n.id || e.b === n.id).length === 0;
     const isSel = selected?.kind === "node" && selected.id === n.id;
+    const isBondSource = drag?.kind === "bond-from" && drag.id === n.id;
+    const isPendingBond = pendingBond === n.id;
+    const ringStroke = isSel ? "hsl(var(--neon-cyan))"
+      : isBondSource || isPendingBond ? "hsl(var(--neon-magenta))"
+      : null;
     const color = ELEMENT_DATA[n.el].color;
     return (
       <g key={n.id} style={{ cursor: "grab" }}>
+        {(isBondSource || isPendingBond) && (
+          <circle cx={n.x} cy={n.y} r={16} fill="none" stroke="hsl(var(--neon-magenta))" strokeWidth={1.4} strokeDasharray="3 3" opacity={0.8} />
+        )}
         {showLabel ? (
           <>
-            <circle cx={n.x} cy={n.y} r={11} fill="#0b0d18" stroke={isSel ? "hsl(var(--neon-cyan))" : color} strokeWidth={isSel ? 2.4 : 1.4} />
+            <circle cx={n.x} cy={n.y} r={11} fill="#0b0d18" stroke={ringStroke ?? color} strokeWidth={ringStroke ? 2.4 : 1.4} />
             <text x={n.x} y={n.y + 4} textAnchor="middle" fontSize={n.el.length > 1 ? 10 : 12} fontWeight={700} fill={color}>
               {n.el}
             </text>
           </>
         ) : (
-          <circle cx={n.x} cy={n.y} r={isSel ? 5 : 2.5} fill={isSel ? "hsl(var(--neon-cyan))" : "transparent"} />
+          <circle cx={n.x} cy={n.y} r={isSel ? 5 : 2.5} fill={ringStroke ?? "transparent"} />
         )}
-        {/* hit area */}
-        <circle cx={n.x} cy={n.y} r={16} fill="transparent" />
+        {/* enlarged touch hit area */}
+        <circle cx={n.x} cy={n.y} r={NODE_HIT} fill="transparent" />
       </g>
     );
   });
@@ -692,7 +737,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
               </div>
             </div>
             <div>
-              <div className="text-[9px] uppercase tracking-widest text-foreground/50 mb-1.5">Bonds (drag from atom)</div>
+              <div className="text-[9px] uppercase tracking-widest text-foreground/50 mb-1.5">Bonds (drag, or tap A then tap B)</div>
               <div className="grid grid-cols-4 gap-1.5">
                 {([1, 2, 3] as BondOrder[]).map(o => (
                   <button key={o} onClick={() => setTool({ kind: "bond", order: o })}
@@ -755,7 +800,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
               </div>
             </div>
             <div className="text-[10px] text-foreground/40 leading-relaxed border-t border-white/5 pt-2">
-              <b>Tips:</b> Drag any atom to move. Bond tool: drag from one atom to another to bond — drag to empty space to add a new C. Drop a ring on an existing edge to <b>fuse</b>. Pinch to zoom.
+              <b>Tips:</b> Atom tool taps to place. Bond tool: <b>drag</b> A→B, or <b>tap A then tap B</b> (mobile-friendly). Tap an existing bond to cycle 1→2→3. Drop a ring on an edge to fuse. Pinch to zoom.
             </div>
           </div>
 
