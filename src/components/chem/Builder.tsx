@@ -800,7 +800,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
               </div>
             </div>
             <div className="text-[10px] text-foreground/40 leading-relaxed border-t border-white/5 pt-2">
-              <b>Tips:</b> Drag any atom to move. Bond tool: drag from one atom to another to bond — drag to empty space to add a new C. Drop a ring on an existing edge to <b>fuse</b>. Pinch to zoom.
+              <b>Tips:</b> Atom tool taps to place. Bond tool: <b>drag</b> A→B, or <b>tap A then tap B</b> (mobile-friendly). Tap an existing bond to cycle 1→2→3. Drop a ring on an edge to fuse. Pinch to zoom.
             </div>
           </div>
 
