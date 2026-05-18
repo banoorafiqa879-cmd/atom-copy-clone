@@ -116,7 +116,7 @@ function nodeAt(state: State, x: number, y: number, r = SNAP) {
   return best;
 }
 
-function edgeAt(state: State, x: number, y: number, r = 16) {
+function edgeAt(state: State, x: number, y: number, r = EDGE_HIT) {
   for (const e of state.edges) {
     const a = state.nodes.find(n => n.id === e.a);
     const b = state.nodes.find(n => n.id === e.b);
