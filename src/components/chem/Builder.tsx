@@ -152,6 +152,10 @@ export default function Builder({ onClose, onGenerate }: Props) {
     | null
   >(null);
   const [selected, setSelected] = useState<{ kind: "node" | "edge"; id: number } | null>(null);
+  // Two-step bond mode: first tap stores source atom id; second tap on
+  // another atom creates the bond. Reliable on mobile vs. drag accuracy.
+  const [pendingBond, setPendingBond] = useState<number | null>(null);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchRef = useRef<{ d: number; k: number; cx: number; cy: number; vx: number; vy: number } | null>(null);
