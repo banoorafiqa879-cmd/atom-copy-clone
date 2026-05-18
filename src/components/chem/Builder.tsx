@@ -577,7 +577,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
     return (
       <g key={e.id}>
         {/* hit area */}
-        <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={14} />
+        <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={22} />
         {offsets.map((o, i) => (
           <line key={i}
             x1={a.x + nx * o} y1={a.y + ny * o}
