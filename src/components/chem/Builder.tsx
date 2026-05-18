@@ -475,9 +475,39 @@ export default function Builder({ onClose, onGenerate }: Props) {
       const next = clone(state);
       const fromNode = next.nodes.find(n => n.id === drag.id);
       if (!fromNode) { setDrag(null); return; }
+
+      // Detect "tap, no drag" so we can offer two-step tap-to-bond on mobile.
+      const startPx = pointerStart.current;
+      const movedPx = startPx ? Math.hypot(e.clientX - startPx.x, e.clientY - startPx.y) : 0;
+      const isTap = movedPx < 6;
+
       let target = nodeAt(next, w.x, w.y);
-      // exclude self
       if (target && target.id === fromNode.id) target = null;
+
+      if (isTap && !target) {
+        // First tap on an atom → arm pending bond. Second tap on another atom completes it.
+        if (pendingBond !== null && pendingBond !== fromNode.id) {
+          const src = next.nodes.find(n => n.id === pendingBond);
+          if (src) {
+            const existing = next.edges.find(
+              ed => (ed.a === src.id && ed.b === fromNode.id) || (ed.b === src.id && ed.a === fromNode.id),
+            );
+            if (existing) existing.order = tool.order;
+            else next.edges.push({ id: nid(), a: src.id, b: fromNode.id, order: tool.order });
+            commit(next);
+            setPendingBond(null);
+            setDrag(null);
+            return;
+          }
+        }
+        setPendingBond(fromNode.id);
+        setDrag(null);
+        return;
+      }
+
+      // Any committing action clears pending state.
+      setPendingBond(null);
+
       if (!target) {
         // Place new C atom at end. If user just tapped (no drag) so L≈0,
         // pick a direction that avoids overlapping existing neighbours.
@@ -485,7 +515,6 @@ export default function Builder({ onClose, onGenerate }: Props) {
         const L = Math.hypot(dx, dy);
         let ux: number, uy: number, dist: number;
         if (L < 6) {
-          // Tap on atom — compute neighbour-averaged outward direction.
           let nbx = 0, nby = 0, count = 0;
           for (const ed of next.edges) {
             const other = ed.a === fromNode.id ? next.nodes.find(n => n.id === ed.b)
@@ -494,7 +523,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
           }
           if (count === 0) { ux = 1; uy = 0; }
           else {
-            const ang = Math.atan2(-nby, -nbx); // opposite of neighbour centroid
+            const ang = Math.atan2(-nby, -nbx);
             ux = Math.cos(ang); uy = Math.sin(ang);
           }
           dist = BOND_LEN;
@@ -506,7 +535,6 @@ export default function Builder({ onClose, onGenerate }: Props) {
         next.nodes.push({ id, el: "C", x: fromNode.x + ux * dist, y: fromNode.y + uy * dist });
         target = next.nodes[next.nodes.length - 1];
       }
-      // avoid duplicate; if exists, cycle order
       const existing = next.edges.find(
         e => (e.a === fromNode.id && e.b === target!.id) || (e.b === fromNode.id && e.a === target!.id),
       );
