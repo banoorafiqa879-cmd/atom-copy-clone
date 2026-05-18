@@ -320,6 +320,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    pointerStart.current = { x: e.clientX, y: e.clientY };
 
     if (pointers.current.size === 2) {
       // start pinch
