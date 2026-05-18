@@ -737,7 +737,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
               </div>
             </div>
             <div>
-              <div className="text-[9px] uppercase tracking-widest text-foreground/50 mb-1.5">Bonds (drag from atom)</div>
+              <div className="text-[9px] uppercase tracking-widest text-foreground/50 mb-1.5">Bonds (drag, or tap A then tap B)</div>
               <div className="grid grid-cols-4 gap-1.5">
                 {([1, 2, 3] as BondOrder[]).map(o => (
                   <button key={o} onClick={() => setTool({ kind: "bond", order: o })}
