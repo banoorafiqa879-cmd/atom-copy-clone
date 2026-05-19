@@ -124,7 +124,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
   useEffect(() => {
     setStereoSummary(heuristicSummary);
     let cancelled = false;
-    stereochemSummaryAsync(mol)
+    stereochemSummaryAsync(mol, planes.length)
       .then((real) => { if (!cancelled) setStereoSummary(real); })
       .catch(() => { /* keep heuristic fallback */ });
     return () => { cancelled = true; };
