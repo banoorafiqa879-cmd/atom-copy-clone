@@ -899,7 +899,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
               </div>
             </div>
             <div className="text-[10px] text-foreground/40 leading-relaxed border-t border-white/5 pt-2">
-              <b>Tips:</b> Atom tool taps to place. Bond tool: <b>drag</b> A→B, or <b>tap A then tap B</b> (mobile-friendly). Tap an existing bond to cycle 1→2→3. Drop a ring on an edge to fuse. Pinch to zoom.
+              <b>Tips:</b> <b>Atom tool</b> — tap on/near an existing atom to attach (drag to set direction). First atom on an empty canvas seeds the structure. <b>Bond tool</b> — drag A→B, or tap A then tap B. Tap a bond to cycle 1→2→3. Drop a ring on an edge to fuse. Pinch to zoom.
             </div>
           </div>
 
