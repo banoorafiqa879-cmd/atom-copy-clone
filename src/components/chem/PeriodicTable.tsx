@@ -94,10 +94,13 @@ export default function PeriodicTable({ current, onSelect, onClose }: Props) {
           </div>
         </div>
 
-        <div className="p-3 sm:p-5 overflow-auto">
+        <div className="p-2 sm:p-5 overflow-auto">
+          <div className="mb-2 text-[10px] text-foreground/60">
+            <span className="text-[hsl(var(--neon-cyan))] font-semibold">Supported now:</span> H, C, N, O, F, S, Cl, Br. Other tiles are educational reference only.
+          </div>
           <div
-            className="grid gap-1 min-w-[640px]"
-            style={{ gridTemplateColumns: "repeat(18, minmax(34px, 1fr))" }}
+            className="grid gap-[3px] sm:gap-1"
+            style={{ gridTemplateColumns: "repeat(18, minmax(0, 1fr))", minWidth: 0 }}
           >
             {ELEMENTS.map(e => {
               const isSup = supported.has(e.sym as Element);
@@ -108,20 +111,20 @@ export default function PeriodicTable({ current, onSelect, onClose }: Props) {
                   key={e.z}
                   disabled={!isSup}
                   onClick={() => isSup && onSelect(e.sym as Element)}
-                  title={isSup ? `${e.name} (Z=${e.z})` : `${e.name} — coming soon`}
+                  title={isSup ? `${e.name} (Z=${e.z})` : `${e.name} — not yet supported`}
                   style={{ gridColumnStart: e.group, gridRowStart: e.period }}
                   className={cn(
-                    "aspect-square rounded-md border bg-gradient-to-br p-1 flex flex-col items-center justify-center text-[10px] transition relative",
-                    CAT_COLOR[e.cat],
-                    isSup ? "active:scale-95 hover:scale-105 hover:z-10 cursor-pointer" : "opacity-25 cursor-not-allowed grayscale",
+                    "aspect-square rounded sm:rounded-md border bg-gradient-to-br p-0.5 sm:p-1 flex flex-col items-center justify-center text-[8px] sm:text-[10px] transition relative min-w-0",
+                    isSup ? CAT_COLOR[e.cat] : "border-white/5 bg-white/[0.02]",
+                    isSup ? "active:scale-95 hover:scale-105 hover:z-10 cursor-pointer ring-1 ring-[hsl(var(--neon-cyan))]/30" : "opacity-30 cursor-not-allowed grayscale pointer-events-none",
                     isCur && "ring-2 ring-[hsl(var(--neon-cyan))] shadow-[0_0_18px_hsl(var(--neon-cyan)/0.6)]",
-                    !inSearch && q && "opacity-15"
+                    !inSearch && q && "opacity-10"
                   )}
                 >
-                  <span className="text-[8px] text-foreground/50 leading-none">{e.z}</span>
-                  <span className="font-bold text-[13px] sm:text-[14px] leading-none mt-0.5"
+                  <span className="text-[7px] sm:text-[8px] text-foreground/50 leading-none">{e.z}</span>
+                  <span className="font-bold text-[10px] sm:text-[14px] leading-none mt-0.5"
                     style={isSup ? { color: ELEMENT_DATA[e.sym as Element].color } : undefined}>{e.sym}</span>
-                  <span className="text-[7px] text-foreground/60 leading-none truncate w-full text-center mt-0.5">{e.name}</span>
+                  <span className="hidden sm:block text-[7px] text-foreground/60 leading-none truncate w-full text-center mt-0.5">{e.name}</span>
                 </button>
               );
             })}
@@ -133,7 +136,7 @@ export default function PeriodicTable({ current, onSelect, onClose }: Props) {
             ))}
           </div>
           <p className="mt-3 text-[10px] text-foreground/50 leading-relaxed">
-            <span className="text-amber-300/90 font-semibold">Engine limitation:</span> the 3D builder currently supports only <span className="text-foreground/80 font-semibold">H, C, N, O, F, S, Cl, Br</span>. Greyed elements are shown for educational reference but cannot yet be placed — full valence/geometry support for the remaining periodic table is on the roadmap.
+            <span className="text-amber-300/90 font-semibold">Engine limitation:</span> only <span className="text-foreground/80 font-semibold">H, C, N, O, F, S, Cl, Br</span> can be placed in the 3D builder. Greyed tiles are non-interactive — full valence/geometry support for the rest of the periodic table is on the roadmap.
           </p>
         </div>
       </div>

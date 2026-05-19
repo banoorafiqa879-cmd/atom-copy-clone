@@ -147,10 +147,23 @@ export default function Builder({ onClose, onGenerate }: Props) {
   const [drag, setDrag] = useState<
     | { kind: "node"; id: number; ox: number; oy: number }
     | { kind: "bond-from"; id: number; tx: number; ty: number }
+    | { kind: "atom-attach"; anchorId: number; tx: number; ty: number; el: Element }
     | { kind: "ring-preview"; x: number; y: number }
     | { kind: "pan"; sx: number; sy: number; vx: number; vy: number }
     | null
   >(null);
+  const [warn, setWarn] = useState<string | null>(null);
+  const warnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flash = (msg: string) => {
+    setWarn(msg);
+    if (warnTimer.current) clearTimeout(warnTimer.current);
+    warnTimer.current = setTimeout(() => setWarn(null), 1800);
+  };
+  const usedValence = (s: State, nodeId: number) => {
+    let u = 0;
+    for (const e of s.edges) if (e.a === nodeId || e.b === nodeId) u += e.order;
+    return u;
+  };
   const [selected, setSelected] = useState<{ kind: "node" | "edge"; id: number } | null>(null);
   // Two-step bond mode: first tap stores source atom id; second tap on
   // another atom creates the bond. Reliable on mobile vs. drag accuracy.
@@ -369,15 +382,30 @@ export default function Builder({ onClose, onGenerate }: Props) {
     }
 
     if (tool.kind === "atom") {
-      if (hitNode) {
-        // start drag (move) — but on tap (no movement) we'll change element on pointerup
-        setDrag({ kind: "node", id: hitNode.id, ox: w.x - hitNode.x, oy: w.y - hitNode.y });
-      } else {
+      // Resolve a snap anchor: existing atom > bond endpoint > nearest atom within 2× radius.
+      let anchor: NodeA | null = hitNode;
+      if (!anchor && hitEdge) {
+        const a = state.nodes.find(n => n.id === hitEdge.a)!;
+        const b = state.nodes.find(n => n.id === hitEdge.b)!;
+        anchor = Math.hypot(a.x - w.x, a.y - w.y) < Math.hypot(b.x - w.x, b.y - w.y) ? a : b;
+      }
+      if (!anchor) anchor = nodeAt(state, w.x, w.y, SNAP * 2.2);
+
+      if (anchor) {
+        // Reject if anchor valence is already saturated
+        if (usedValence(state, anchor.id) >= VALENCE[anchor.el]) {
+          flash(`${anchor.el} already at full valence (${VALENCE[anchor.el]})`);
+          return;
+        }
+        setDrag({ kind: "atom-attach", anchorId: anchor.id, tx: w.x, ty: w.y, el: tool.el });
+      } else if (state.nodes.length === 0) {
+        // Seed the first atom on an empty canvas
         const next = clone(state);
         const id = nid();
         next.nodes.push({ id, el: tool.el, x: w.x, y: w.y });
         commit(next);
-        setDrag({ kind: "node", id, ox: 0, oy: 0 });
+      } else {
+        flash("Tap on or near an existing atom to attach");
       }
       return;
     }
@@ -449,6 +477,8 @@ export default function Builder({ onClose, onGenerate }: Props) {
         return ns;
       });
     } else if (drag.kind === "bond-from") {
+      setDrag({ ...drag, tx: w.x, ty: w.y });
+    } else if (drag.kind === "atom-attach") {
       setDrag({ ...drag, tx: w.x, ty: w.y });
     } else if (drag.kind === "ring-preview") {
       setDrag({ kind: "ring-preview", x: w.x, y: w.y });
@@ -540,6 +570,55 @@ export default function Builder({ onClose, onGenerate }: Props) {
       );
       if (existing) existing.order = tool.order;
       else next.edges.push({ id: nid(), a: fromNode.id, b: target.id, order: tool.order });
+      commit(next);
+      setDrag(null);
+      return;
+    }
+
+    if (drag.kind === "atom-attach" && tool.kind === "atom") {
+      const next = clone(state);
+      const anchor = next.nodes.find(n => n.id === drag.anchorId);
+      if (!anchor) { setDrag(null); return; }
+      if (usedValence(next, anchor.id) >= VALENCE[anchor.el]) {
+        flash(`${anchor.el} already at full valence`);
+        setDrag(null);
+        return;
+      }
+      // Direction: pointer drag direction, else away from existing neighbours.
+      const dx = w.x - anchor.x, dy = w.y - anchor.y;
+      const L = Math.hypot(dx, dy);
+      let ux: number, uy: number;
+      if (L > 8) {
+        ux = dx / L; uy = dy / L;
+      } else {
+        let nbx = 0, nby = 0, count = 0;
+        for (const ed of next.edges) {
+          const other = ed.a === anchor.id ? next.nodes.find(n => n.id === ed.b)
+                     : ed.b === anchor.id ? next.nodes.find(n => n.id === ed.a) : null;
+          if (other) { nbx += other.x - anchor.x; nby += other.y - anchor.y; count++; }
+        }
+        if (count === 0) { ux = 1; uy = 0; }
+        else {
+          const ang = Math.atan2(-nby, -nbx);
+          // Stagger by neighbour count so 2nd/3rd attachments don't overlap
+          const used = usedValence(next, anchor.id);
+          const off = (used % 2 === 0 ? 1 : -1) * (used * 0.5);
+          ux = Math.cos(ang + off); uy = Math.sin(ang + off);
+        }
+      }
+      const id = nid();
+      const nx = anchor.x + ux * BOND_LEN;
+      const ny = anchor.y + uy * BOND_LEN;
+      // Snap to an existing distant atom if we landed on one (extend ring/bridge)
+      const landing = nodeAt(next, nx, ny, SNAP * 0.7);
+      if (landing && landing.id !== anchor.id) {
+        const exists = next.edges.find(ed =>
+          (ed.a === anchor.id && ed.b === landing.id) || (ed.b === anchor.id && ed.a === landing.id));
+        if (!exists) next.edges.push({ id: nid(), a: anchor.id, b: landing.id, order: 1 });
+      } else {
+        next.nodes.push({ id, el: drag.el, x: nx, y: ny });
+        next.edges.push({ id: nid(), a: anchor.id, b: id, order: 1 });
+      }
       commit(next);
       setDrag(null);
       return;
@@ -674,12 +753,32 @@ export default function Builder({ onClose, onGenerate }: Props) {
   };
 
   const renderBondDrag = () => {
-    if (!drag || drag.kind !== "bond-from") return null;
-    const from = state.nodes.find(n => n.id === drag.id);
-    if (!from) return null;
-    return (
-      <line x1={from.x} y1={from.y} x2={drag.tx} y2={drag.ty} stroke="hsl(var(--neon-cyan))" strokeWidth={1.6} strokeDasharray="4 3" pointerEvents="none" />
-    );
+    if (!drag) return null;
+    if (drag.kind === "bond-from") {
+      const from = state.nodes.find(n => n.id === drag.id);
+      if (!from) return null;
+      return (
+        <line x1={from.x} y1={from.y} x2={drag.tx} y2={drag.ty} stroke="hsl(var(--neon-cyan))" strokeWidth={1.6} strokeDasharray="4 3" pointerEvents="none" />
+      );
+    }
+    if (drag.kind === "atom-attach") {
+      const anchor = state.nodes.find(n => n.id === drag.anchorId);
+      if (!anchor) return null;
+      const dx = drag.tx - anchor.x, dy = drag.ty - anchor.y;
+      const L = Math.hypot(dx, dy);
+      const ux = L > 8 ? dx / L : 1, uy = L > 8 ? dy / L : 0;
+      const gx = anchor.x + ux * BOND_LEN, gy = anchor.y + uy * BOND_LEN;
+      const color = ELEMENT_DATA[drag.el].color;
+      return (
+        <g pointerEvents="none">
+          <circle cx={anchor.x} cy={anchor.y} r={18} fill="none" stroke="hsl(var(--neon-magenta))" strokeWidth={1.4} strokeDasharray="3 3" opacity={0.9} />
+          <line x1={anchor.x} y1={anchor.y} x2={gx} y2={gy} stroke="hsl(var(--neon-cyan))" strokeWidth={1.6} strokeDasharray="4 3" />
+          <circle cx={gx} cy={gy} r={12} fill="#0b0d18" stroke={color} strokeWidth={1.8} opacity={0.85} />
+          <text x={gx} y={gy + 4} textAnchor="middle" fontSize={12} fontWeight={700} fill={color} opacity={0.9}>{drag.el}</text>
+        </g>
+      );
+    }
+    return null;
   };
 
   const RingBtn = ({ sides, label, Icon }: { sides: 3 | 4 | 5 | 6 | 7 | 8; label: string; Icon?: React.ComponentType<{ className?: string }> }) => (
@@ -800,12 +899,17 @@ export default function Builder({ onClose, onGenerate }: Props) {
               </div>
             </div>
             <div className="text-[10px] text-foreground/40 leading-relaxed border-t border-white/5 pt-2">
-              <b>Tips:</b> Atom tool taps to place. Bond tool: <b>drag</b> A→B, or <b>tap A then tap B</b> (mobile-friendly). Tap an existing bond to cycle 1→2→3. Drop a ring on an edge to fuse. Pinch to zoom.
+              <b>Tips:</b> <b>Atom tool</b> — tap on/near an existing atom to attach (drag to set direction). First atom on an empty canvas seeds the structure. <b>Bond tool</b> — drag A→B, or tap A then tap B. Tap a bond to cycle 1→2→3. Drop a ring on an edge to fuse. Pinch to zoom.
             </div>
           </div>
 
           {/* Canvas */}
           <div className="relative flex-1 min-h-[55vh]">
+            {warn && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded-lg glass border border-amber-400/40 text-[11px] text-amber-200 shadow-lg pointer-events-none animate-fade-in">
+                {warn}
+              </div>
+            )}
             <svg
               ref={svgRef}
               viewBox="0 0 400 400"
