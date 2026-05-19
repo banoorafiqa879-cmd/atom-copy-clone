@@ -382,15 +382,30 @@ export default function Builder({ onClose, onGenerate }: Props) {
     }
 
     if (tool.kind === "atom") {
-      if (hitNode) {
-        // start drag (move) — but on tap (no movement) we'll change element on pointerup
-        setDrag({ kind: "node", id: hitNode.id, ox: w.x - hitNode.x, oy: w.y - hitNode.y });
-      } else {
+      // Resolve a snap anchor: existing atom > bond endpoint > nearest atom within 2× radius.
+      let anchor: NodeA | null = hitNode;
+      if (!anchor && hitEdge) {
+        const a = state.nodes.find(n => n.id === hitEdge.a)!;
+        const b = state.nodes.find(n => n.id === hitEdge.b)!;
+        anchor = Math.hypot(a.x - w.x, a.y - w.y) < Math.hypot(b.x - w.x, b.y - w.y) ? a : b;
+      }
+      if (!anchor) anchor = nodeAt(state, w.x, w.y, SNAP * 2.2);
+
+      if (anchor) {
+        // Reject if anchor valence is already saturated
+        if (usedValence(state, anchor.id) >= VALENCE[anchor.el]) {
+          flash(`${anchor.el} already at full valence (${VALENCE[anchor.el]})`);
+          return;
+        }
+        setDrag({ kind: "atom-attach", anchorId: anchor.id, tx: w.x, ty: w.y, el: tool.el });
+      } else if (state.nodes.length === 0) {
+        // Seed the first atom on an empty canvas
         const next = clone(state);
         const id = nid();
         next.nodes.push({ id, el: tool.el, x: w.x, y: w.y });
         commit(next);
-        setDrag({ kind: "node", id, ox: 0, oy: 0 });
+      } else {
+        flash("Tap on or near an existing atom to attach");
       }
       return;
     }
