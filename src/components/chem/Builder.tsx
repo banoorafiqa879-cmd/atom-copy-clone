@@ -624,7 +624,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
       return;
     }
 
-
+    if (drag.kind === "ring-preview" && tool.kind === "ring") {
       const hitNode = nodeAt(state, w.x, w.y);
       const hitEdge = !hitNode ? edgeAt(state, w.x, w.y) : null;
       placeRing(w.x, w.y, tool.spec, hitEdge, hitNode);
