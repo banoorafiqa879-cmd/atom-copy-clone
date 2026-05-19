@@ -753,12 +753,32 @@ export default function Builder({ onClose, onGenerate }: Props) {
   };
 
   const renderBondDrag = () => {
-    if (!drag || drag.kind !== "bond-from") return null;
-    const from = state.nodes.find(n => n.id === drag.id);
-    if (!from) return null;
-    return (
-      <line x1={from.x} y1={from.y} x2={drag.tx} y2={drag.ty} stroke="hsl(var(--neon-cyan))" strokeWidth={1.6} strokeDasharray="4 3" pointerEvents="none" />
-    );
+    if (!drag) return null;
+    if (drag.kind === "bond-from") {
+      const from = state.nodes.find(n => n.id === drag.id);
+      if (!from) return null;
+      return (
+        <line x1={from.x} y1={from.y} x2={drag.tx} y2={drag.ty} stroke="hsl(var(--neon-cyan))" strokeWidth={1.6} strokeDasharray="4 3" pointerEvents="none" />
+      );
+    }
+    if (drag.kind === "atom-attach") {
+      const anchor = state.nodes.find(n => n.id === drag.anchorId);
+      if (!anchor) return null;
+      const dx = drag.tx - anchor.x, dy = drag.ty - anchor.y;
+      const L = Math.hypot(dx, dy);
+      const ux = L > 8 ? dx / L : 1, uy = L > 8 ? dy / L : 0;
+      const gx = anchor.x + ux * BOND_LEN, gy = anchor.y + uy * BOND_LEN;
+      const color = ELEMENT_DATA[drag.el].color;
+      return (
+        <g pointerEvents="none">
+          <circle cx={anchor.x} cy={anchor.y} r={18} fill="none" stroke="hsl(var(--neon-magenta))" strokeWidth={1.4} strokeDasharray="3 3" opacity={0.9} />
+          <line x1={anchor.x} y1={anchor.y} x2={gx} y2={gy} stroke="hsl(var(--neon-cyan))" strokeWidth={1.6} strokeDasharray="4 3" />
+          <circle cx={gx} cy={gy} r={12} fill="#0b0d18" stroke={color} strokeWidth={1.8} opacity={0.85} />
+          <text x={gx} y={gy + 4} textAnchor="middle" fontSize={12} fontWeight={700} fill={color} opacity={0.9}>{drag.el}</text>
+        </g>
+      );
+    }
+    return null;
   };
 
   const RingBtn = ({ sides, label, Icon }: { sides: 3 | 4 | 5 | 6 | 7 | 8; label: string; Icon?: React.ComponentType<{ className?: string }> }) => (
