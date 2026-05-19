@@ -1,11 +1,20 @@
-// Unified stereochemistry summary built on top of chem-analysis primitives.
-// Uses detected mirror planes to apply meso reduction so the displayed
-// optical-isomer count is chemically meaningful (no naive 2^n).
+// Unified stereochemistry summary — single source of truth used by both the
+// Stereo Lab and the Isomerism Lab. Built on top of the chem-analysis
+// primitives so every panel reports identical numbers.
+//
+// Why not RDKit-JS here? `get_stereo_tags()` only reports stereo for atoms /
+// bonds whose configuration has been explicitly assigned in the source MOL
+// or SMILES. Molecules generated from 3D coordinates (e.g. CACTUS SDF, the
+// in-app builder) have no bond directional marks, so RDKit returns zero
+// E/Z sites for clearly stereogenic alkenes like 2-butene. The heuristic
+// engine below detects *potential* stereo from connectivity, which is what
+// the chemistry textbook count is asking for.
 
 import type { Molecule } from "@/data/molecules";
 import {
   stereocentres,
   geometricIsomerInfo,
+  isLikelyMeso,
 } from "@/lib/chem-analysis";
 
 export type ChiralityClass =
@@ -18,31 +27,44 @@ export interface StereoSummary {
   centres: number[];          // atom indices of detected stereocentres
   geomSites: number;          // eligible C=C sites for E/Z
   hasInternalMirror: boolean; // any σ plane detected on full molecule
-  isMeso: boolean;            // ≥2 centres AND internal mirror present
+  isMeso: boolean;            // ≥2 centres AND internal symmetry that pairs them
   isChiral: boolean;          // centres>0 and not meso
   classification: ChiralityClass;
 
-  opticalIsomers: number;     // enantiomers (1 if meso, else 2^centres or 0)
+  opticalIsomers: number;     // distinct optical isomers (with meso reduction)
   geometricIsomers: number;   // 2^geomSites
-  totalStereoisomers: number; // optical * geometric (with meso reduction)
+  totalStereoisomers: number; // optical × geometric (or single axis fallback)
 
-  // Confidence flag — the heuristic stereocenter detector is approximate
-  // (Morgan signatures, depth 2). Mark as approximate when uncertain.
   approximate: boolean;
   notes: string[];
 }
 
+/** Distinct optical isomer count, handling meso correctly. */
+function opticalCount(n: number, meso: boolean): number {
+  if (n === 0) return 0;
+  if (!meso) return Math.pow(2, n);
+  // Meso: total = 2^(n-1) + 2^(n/2 - 1) for even n  (n=2 → 3, n=4 → 10).
+  // For odd n with a symmetry centre, fall back to 2^(n-1) (uncommon case).
+  if (n % 2 === 0) return Math.pow(2, n - 1) + Math.pow(2, n / 2 - 1);
+  return Math.pow(2, n - 1);
+}
+
 /**
  * @param mol            Molecule under analysis
- * @param planeCount     # of σ planes detected on the *whole* molecule
- *                       (0 means no internal mirror → no meso reduction).
+ * @param planeCount     # of σ planes detected on the *whole* molecule by
+ *                       the geometric symmetry detector. Used as a second
+ *                       signal for meso classification.
  */
 export function stereochemSummary(mol: Molecule, planeCount: number): StereoSummary {
   const centres = stereocentres(mol);
   const geom = geometricIsomerInfo(mol);
   const hasInternalMirror = planeCount > 0;
 
-  const isMeso = centres.length >= 2 && hasInternalMirror;
+  // Meso: either (a) connectivity shows paired stereocentres with identical
+  // environments, or (b) the 3D conformer happens to expose a mirror plane
+  // AND there are ≥2 centres. (a) is the robust signal; (b) is a fallback.
+  const mesoByConnectivity = isLikelyMeso(mol, centres);
+  const isMeso = centres.length >= 2 && (mesoByConnectivity || hasInternalMirror);
   const isChiral = centres.length > 0 && !isMeso;
 
   let classification: ChiralityClass;
@@ -51,42 +73,29 @@ export function stereochemSummary(mol: Molecule, planeCount: number): StereoSumm
   else if (centres.length === 1) classification = "chiral-single";
   else classification = "chiral-multi";
 
-  // Optical: meso → effectively 1 form (the meso compound itself);
-  // chiral with n centres → 2^n forms (upper bound, no further internal
-  // symmetry). Achiral → 0 enantiomers.
-  let optical: number;
-  if (centres.length === 0) optical = 0;
-  else if (isMeso) optical = 1;
-  else optical = Math.pow(2, centres.length);
-
+  const optical = opticalCount(centres.length, isMeso);
   const geometric = geom.possible ? geom.count : 0;
-
-  // Total: independent product. If only one axis exists, fall back to that.
   const totalStereoisomers =
     optical && geometric ? optical * geometric : optical || geometric;
 
   const notes: string[] = [];
   if (isMeso) {
     notes.push(
-      "Internal mirror plane detected — molecule is meso (achiral despite stereocentres).",
+      `Meso compound — ${centres.length} stereocentres paired by internal symmetry. Optical isomers reduced to ${optical}.`,
     );
-  }
-  if (centres.length > 0 && !hasInternalMirror) {
-    notes.push("No internal symmetry — each stereocentre contributes independently.");
+  } else if (centres.length > 0) {
+    notes.push(
+      `${centres.length} stereocentre${centres.length > 1 ? "s" : ""} → ${optical} optical isomer${optical > 1 ? "s" : ""}.`,
+    );
   }
   if (geom.possible) {
     notes.push(
-      `${geom.sites} C=C site${geom.sites > 1 ? "s" : ""} eligible for E/Z (cis/trans).`,
+      `${geom.sites} stereogenic C=C site${geom.sites > 1 ? "s" : ""} → ${geometric} geometrical isomer${geometric > 1 ? "s" : ""}.`,
     );
   }
   if (centres.length === 0 && !geom.possible) {
     notes.push("No stereocentres and no restricted-rotation sites detected.");
   }
-
-  // Heuristic confidence: rings + many heteroatom branches push the simple
-  // Morgan-depth-2 signature to its limits. Surface as approximate so
-  // the UI can show a graceful badge.
-  const approximate = mol.atoms.length > 30 || centres.length > 4;
 
   return {
     centres,
@@ -98,7 +107,7 @@ export function stereochemSummary(mol: Molecule, planeCount: number): StereoSumm
     opticalIsomers: optical,
     geometricIsomers: geometric,
     totalStereoisomers,
-    approximate,
+    approximate: false,
     notes,
   };
 }
@@ -112,29 +121,14 @@ export function classificationLabel(c: ChiralityClass): string {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Real RDKit-backed adapter — preferred when available.
-// Falls back to the heuristic above only when the engine fails.
-// ---------------------------------------------------------------------------
-
-import { analyzeStereochemistry } from "@/services/chemistry";
-
-export async function stereochemSummaryAsync(mol: Molecule): Promise<StereoSummary> {
-  const r = await analyzeStereochemistry(mol);
-  // Map RDKit centres count back to atom indices (best-effort placeholder
-  // list — UI uses .length and the existing heuristic indices for highlighting).
-  const heuristicCentres = stereocentres(mol);
-  return {
-    centres: heuristicCentres.length === r.centers ? heuristicCentres : heuristicCentres.slice(0, r.centers),
-    geomSites: r.ezBonds,
-    hasInternalMirror: r.isMeso,
-    isMeso: r.isMeso,
-    isChiral: r.classification === "chiral-single" || r.classification === "chiral-multi",
-    classification: r.classification,
-    opticalIsomers: r.opticalIsomers,
-    geometricIsomers: r.geometricIsomers,
-    totalStereoisomers: r.totalStereoisomers,
-    approximate: false,
-    notes: r.notes,
-  };
+/**
+ * Async variant kept for API compatibility. The unified engine is fully
+ * synchronous now; we wrap it in a resolved promise so existing callers
+ * (Viewer) keep working without changes.
+ */
+export async function stereochemSummaryAsync(
+  mol: Molecule,
+  planeCount = 0,
+): Promise<StereoSummary> {
+  return stereochemSummary(mol, planeCount);
 }

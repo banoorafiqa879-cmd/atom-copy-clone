@@ -126,6 +126,17 @@ export function ringCount(mol: Molecule): number {
   return Math.max(0, e - n + comps);
 }
 
+/** Morgan-style substituent signature for atom `j`, looking outward from `from`. */
+export function morganSig(mol: Molecule, j: number, depth: number, from: number): string {
+  if (depth === 0) return mol.atoms[j].el;
+  const sub = neighbors(mol, j)
+    .filter(n => n.idx !== from)
+    .map(n => morganSig(mol, n.idx, depth - 1, j))
+    .sort()
+    .join(",");
+  return `${mol.atoms[j].el}(${sub})`;
+}
+
 /** Stereocentre = sp³ C with 4 bonded neighbors and 4 unique neighbor signatures. */
 export function stereocentres(mol: Molecule): number[] {
   const result: number[] = [];
@@ -134,42 +145,72 @@ export function stereocentres(mol: Molecule): number[] {
     const ns = neighbors(mol, i);
     if (ns.length !== 4) continue;
     if (ns.some(n => n.bond.order !== 1)) continue;
-    // Morgan-like signature depth 2
-    const sig = (j: number, depth: number, from: number): string => {
-      if (depth === 0) return mol.atoms[j].el;
-      const sub = neighbors(mol, j)
-        .filter(n => n.idx !== from)
-        .map(n => sig(n.idx, depth - 1, j))
-        .sort()
-        .join(",");
-      return `${mol.atoms[j].el}(${sub})`;
-    };
-    const sigs = ns.map(n => sig(n.idx, 2, i));
+    const sigs = ns.map(n => morganSig(mol, n.idx, 3, i));
     if (new Set(sigs).size === 4) result.push(i);
   }
   return result;
 }
 
+/** Shortest cycle (in atoms) containing bond at index `bondIdx`, or Infinity. */
+export function smallestRingSize(mol: Molecule, bondIdx: number): number {
+  const bond = mol.bonds[bondIdx];
+  const adj: Record<number, number[]> = {};
+  mol.bonds.forEach((b, i) => {
+    if (i === bondIdx) return;
+    (adj[b.a] ??= []).push(b.b);
+    (adj[b.b] ??= []).push(b.a);
+  });
+  const dist = new Map<number, number>([[bond.a, 0]]);
+  const q: number[] = [bond.a];
+  while (q.length) {
+    const cur = q.shift()!;
+    if (cur === bond.b) return (dist.get(cur) ?? 0) + 1;
+    for (const n of adj[cur] ?? []) {
+      if (!dist.has(n)) { dist.set(n, (dist.get(cur) ?? 0) + 1); q.push(n); }
+    }
+  }
+  return Infinity;
+}
+
 /** Detect whether the molecule can show geometrical (cis/trans, E/Z) isomerism.
- *  Returns count of distinct geometrical isomers around eligible C=C bonds (2^n).
+ *  A C=C is stereogenic iff both sp² carbons carry two substituents with
+ *  *distinct* CIP-like environments (compared via depth-2 Morgan signatures).
+ *  Ring-bound C=C requires ring size ≥ 8 to admit E/Z geometry.
  */
 export function geometricIsomerInfo(mol: Molecule): { possible: boolean; count: number; sites: number; reason?: string } {
   let sites = 0;
-  for (const b of mol.bonds) {
+  for (let bi = 0; bi < mol.bonds.length; bi++) {
+    const b = mol.bonds[bi];
     if (b.order !== 2) continue;
     if (mol.atoms[b.a].el !== "C" || mol.atoms[b.b].el !== "C") continue;
     const subsA = neighbors(mol, b.a).filter(n => n.idx !== b.b);
     const subsB = neighbors(mol, b.b).filter(n => n.idx !== b.a);
     if (subsA.length < 2 || subsB.length < 2) continue;
-    const elsA = subsA.map(n => mol.atoms[n.idx].el);
-    const elsB = subsB.map(n => mol.atoms[n.idx].el);
-    if (new Set(elsA).size < 2 || new Set(elsB).size < 2) continue;
+    const sigA1 = morganSig(mol, subsA[0].idx, 2, b.a);
+    const sigA2 = morganSig(mol, subsA[1].idx, 2, b.a);
+    if (sigA1 === sigA2) continue;
+    const sigB1 = morganSig(mol, subsB[0].idx, 2, b.b);
+    const sigB2 = morganSig(mol, subsB[1].idx, 2, b.b);
+    if (sigB1 === sigB2) continue;
+    const ring = smallestRingSize(mol, bi);
+    if (ring !== Infinity && ring < 8) continue; // small rings can't accommodate trans
     sites++;
   }
   if (sites === 0) {
-    return { possible: false, count: 0, sites: 0, reason: "Geometrical isomerism requires restricted rotation (C=C or ring) with two different substituents on each end." };
+    return { possible: false, count: 0, sites: 0, reason: "Geometrical isomerism requires restricted rotation (acyclic C=C or ring ≥ 8) with two different substituents on each end." };
   }
   return { possible: true, count: Math.pow(2, sites), sites };
+}
+
+/** Detect meso compound by pairing stereocentres with identical deep Morgan signatures. */
+export function isLikelyMeso(mol: Molecule, centres: number[]): boolean {
+  if (centres.length < 2 || centres.length % 2 !== 0) return false;
+  const sigs = centres.map(i => morganSig(mol, i, 5, -1));
+  const sorted = [...sigs].sort();
+  for (let i = 0; i < sorted.length; i += 2) {
+    if (sorted[i] !== sorted[i + 1]) return false;
+  }
+  return true;
 }
 
 /** Optical isomer info: 2^n stereocentres (upper bound for chiral isomers). */
