@@ -147,10 +147,23 @@ export default function Builder({ onClose, onGenerate }: Props) {
   const [drag, setDrag] = useState<
     | { kind: "node"; id: number; ox: number; oy: number }
     | { kind: "bond-from"; id: number; tx: number; ty: number }
+    | { kind: "atom-attach"; anchorId: number; tx: number; ty: number; el: Element }
     | { kind: "ring-preview"; x: number; y: number }
     | { kind: "pan"; sx: number; sy: number; vx: number; vy: number }
     | null
   >(null);
+  const [warn, setWarn] = useState<string | null>(null);
+  const warnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flash = (msg: string) => {
+    setWarn(msg);
+    if (warnTimer.current) clearTimeout(warnTimer.current);
+    warnTimer.current = setTimeout(() => setWarn(null), 1800);
+  };
+  const usedValence = (s: State, nodeId: number) => {
+    let u = 0;
+    for (const e of s.edges) if (e.a === nodeId || e.b === nodeId) u += e.order;
+    return u;
+  };
   const [selected, setSelected] = useState<{ kind: "node" | "edge"; id: number } | null>(null);
   // Two-step bond mode: first tap stores source atom id; second tap on
   // another atom creates the bond. Reliable on mobile vs. drag accuracy.
