@@ -575,7 +575,56 @@ export default function Builder({ onClose, onGenerate }: Props) {
       return;
     }
 
-    if (drag.kind === "ring-preview" && tool.kind === "ring") {
+    if (drag.kind === "atom-attach" && tool.kind === "atom") {
+      const next = clone(state);
+      const anchor = next.nodes.find(n => n.id === drag.anchorId);
+      if (!anchor) { setDrag(null); return; }
+      if (usedValence(next, anchor.id) >= VALENCE[anchor.el]) {
+        flash(`${anchor.el} already at full valence`);
+        setDrag(null);
+        return;
+      }
+      // Direction: pointer drag direction, else away from existing neighbours.
+      const dx = w.x - anchor.x, dy = w.y - anchor.y;
+      const L = Math.hypot(dx, dy);
+      let ux: number, uy: number;
+      if (L > 8) {
+        ux = dx / L; uy = dy / L;
+      } else {
+        let nbx = 0, nby = 0, count = 0;
+        for (const ed of next.edges) {
+          const other = ed.a === anchor.id ? next.nodes.find(n => n.id === ed.b)
+                     : ed.b === anchor.id ? next.nodes.find(n => n.id === ed.a) : null;
+          if (other) { nbx += other.x - anchor.x; nby += other.y - anchor.y; count++; }
+        }
+        if (count === 0) { ux = 1; uy = 0; }
+        else {
+          const ang = Math.atan2(-nby, -nbx);
+          // Stagger by neighbour count so 2nd/3rd attachments don't overlap
+          const used = usedValence(next, anchor.id);
+          const off = (used % 2 === 0 ? 1 : -1) * (used * 0.5);
+          ux = Math.cos(ang + off); uy = Math.sin(ang + off);
+        }
+      }
+      const id = nid();
+      const nx = anchor.x + ux * BOND_LEN;
+      const ny = anchor.y + uy * BOND_LEN;
+      // Snap to an existing distant atom if we landed on one (extend ring/bridge)
+      const landing = nodeAt(next, nx, ny, SNAP * 0.7);
+      if (landing && landing.id !== anchor.id) {
+        const exists = next.edges.find(ed =>
+          (ed.a === anchor.id && ed.b === landing.id) || (ed.b === anchor.id && ed.a === landing.id));
+        if (!exists) next.edges.push({ id: nid(), a: anchor.id, b: landing.id, order: 1 });
+      } else {
+        next.nodes.push({ id, el: drag.el, x: nx, y: ny });
+        next.edges.push({ id: nid(), a: anchor.id, b: id, order: 1 });
+      }
+      commit(next);
+      setDrag(null);
+      return;
+    }
+
+
       const hitNode = nodeAt(state, w.x, w.y);
       const hitEdge = !hitNode ? edgeAt(state, w.x, w.y) : null;
       placeRing(w.x, w.y, tool.spec, hitEdge, hitNode);
