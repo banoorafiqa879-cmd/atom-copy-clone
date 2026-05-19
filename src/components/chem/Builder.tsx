@@ -478,6 +478,8 @@ export default function Builder({ onClose, onGenerate }: Props) {
       });
     } else if (drag.kind === "bond-from") {
       setDrag({ ...drag, tx: w.x, ty: w.y });
+    } else if (drag.kind === "atom-attach") {
+      setDrag({ ...drag, tx: w.x, ty: w.y });
     } else if (drag.kind === "ring-preview") {
       setDrag({ kind: "ring-preview", x: w.x, y: w.y });
     }
