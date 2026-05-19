@@ -905,6 +905,11 @@ export default function Builder({ onClose, onGenerate }: Props) {
 
           {/* Canvas */}
           <div className="relative flex-1 min-h-[55vh]">
+            {warn && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded-lg glass border border-amber-400/40 text-[11px] text-amber-200 shadow-lg pointer-events-none animate-fade-in">
+                {warn}
+              </div>
+            )}
             <svg
               ref={svgRef}
               viewBox="0 0 400 400"
