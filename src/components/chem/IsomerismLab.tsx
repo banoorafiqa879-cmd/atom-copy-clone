@@ -218,7 +218,7 @@ function enantiomerLabels(centers: number): { a: string; b: string; aSub: string
   return { a: "Enantiomer A", b: "Enantiomer B", aSub: `${centers} stereocentres`, bSub: "all inverted" };
 }
 
-export default function IsomerismLab({ molecule, onClose, initialTab = "geometric", stereoCenters, isMeso, classification, engineGeometricCount, engineGeomSites }: Props) {
+export default function IsomerismLab({ molecule, onClose, initialTab = "geometric", analysis: providedAnalysis, stereoCenters, isMeso, classification, engineGeometricCount, engineGeomSites }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [dihedral, setDihedral] = useState(60);
   const [bondIdx, setBondIdx] = useState(0);
@@ -229,8 +229,9 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
   const [mobileSide, setMobileSide] = useState<"a" | "b">("a"); // mobile cis/trans + A/B switcher
   const isMobile = useIsMobile();
 
-  const geom = useMemo(() => buildGeometricIsomers(molecule), [molecule]);
-  const stereo = useMemo(() => stereocentres(molecule), [molecule]);
+  const analysis = useMemo(() => providedAnalysis ?? analyzeStereochemistry(molecule), [molecule, providedAnalysis]);
+  const geom = useMemo(() => buildGeometricIsomers(molecule, analysis), [molecule, analysis]);
+  const stereo = useMemo(() => analysis.stereocentres, [analysis]);
   const enant = useMemo(() => buildEnantiomer(molecule), [molecule]);
 
   const rotBonds = useMemo(() => rotatableBonds(molecule), [molecule]);
