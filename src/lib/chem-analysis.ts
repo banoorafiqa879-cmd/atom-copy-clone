@@ -1,4 +1,5 @@
 import type { Molecule, Element, Bond } from "@/data/molecules";
+import { analyzeStereochemistry as analyzeStereoCore } from "@/lib/stereochemistryEngine";
 
 export const ATOMIC_MASS: Record<Element, number> = {
   H: 1.008,
@@ -139,16 +140,7 @@ export function morganSig(mol: Molecule, j: number, depth: number, from: number)
 
 /** Stereocentre = sp³ C with 4 bonded neighbors and 4 unique neighbor signatures. */
 export function stereocentres(mol: Molecule): number[] {
-  const result: number[] = [];
-  for (let i = 0; i < mol.atoms.length; i++) {
-    if (mol.atoms[i].el !== "C") continue;
-    const ns = neighbors(mol, i);
-    if (ns.length !== 4) continue;
-    if (ns.some(n => n.bond.order !== 1)) continue;
-    const sigs = ns.map(n => morganSig(mol, n.idx, 3, i));
-    if (new Set(sigs).size === 4) result.push(i);
-  }
-  return result;
+  return analyzeStereoCore(mol).stereocentres;
 }
 
 /** Shortest cycle (in atoms) containing bond at index `bondIdx`, or Infinity. */
@@ -178,46 +170,26 @@ export function smallestRingSize(mol: Molecule, bondIdx: number): number {
  *  Ring-bound C=C requires ring size ≥ 8 to admit E/Z geometry.
  */
 export function geometricIsomerInfo(mol: Molecule): { possible: boolean; count: number; sites: number; reason?: string } {
-  let sites = 0;
-  for (let bi = 0; bi < mol.bonds.length; bi++) {
-    const b = mol.bonds[bi];
-    if (b.order !== 2) continue;
-    if (mol.atoms[b.a].el !== "C" || mol.atoms[b.b].el !== "C") continue;
-    const subsA = neighbors(mol, b.a).filter(n => n.idx !== b.b);
-    const subsB = neighbors(mol, b.b).filter(n => n.idx !== b.a);
-    if (subsA.length < 2 || subsB.length < 2) continue;
-    const sigA1 = morganSig(mol, subsA[0].idx, 2, b.a);
-    const sigA2 = morganSig(mol, subsA[1].idx, 2, b.a);
-    if (sigA1 === sigA2) continue;
-    const sigB1 = morganSig(mol, subsB[0].idx, 2, b.b);
-    const sigB2 = morganSig(mol, subsB[1].idx, 2, b.b);
-    if (sigB1 === sigB2) continue;
-    const ring = smallestRingSize(mol, bi);
-    if (ring !== Infinity && ring < 8) continue; // small rings can't accommodate trans
-    sites++;
-  }
-  if (sites === 0) {
+  const analysis = analyzeStereoCore(mol);
+  if (analysis.geomSites === 0) {
     return { possible: false, count: 0, sites: 0, reason: "Geometrical isomerism requires restricted rotation (acyclic C=C or ring ≥ 8) with two different substituents on each end." };
   }
-  return { possible: true, count: Math.pow(2, sites), sites };
+  return { possible: true, count: analysis.geometricalIsomerCount, sites: analysis.geomSites };
 }
 
 /** Detect meso compound by pairing stereocentres with identical deep Morgan signatures. */
 export function isLikelyMeso(mol: Molecule, centres: number[]): boolean {
-  if (centres.length < 2 || centres.length % 2 !== 0) return false;
-  const sigs = centres.map(i => morganSig(mol, i, 5, -1));
-  const sorted = [...sigs].sort();
-  for (let i = 0; i < sorted.length; i += 2) {
-    if (sorted[i] !== sorted[i + 1]) return false;
-  }
-  return true;
+  return centres.length >= 2 && analyzeStereoCore(mol).isMeso;
 }
 
 /** Optical isomer info: 2^n stereocentres (upper bound for chiral isomers). */
 export function opticalIsomerInfo(mol: Molecule): { chiral: boolean; count: number; centres: number } {
-  const s = stereocentres(mol);
-  if (s.length === 0) return { chiral: false, count: 0, centres: 0 };
-  return { chiral: true, count: Math.pow(2, s.length), centres: s.length };
+  const analysis = analyzeStereoCore(mol);
+  return {
+    chiral: analysis.opticalIsomerCount > 0,
+    count: analysis.opticalIsomerCount,
+    centres: analysis.stereocentres.length,
+  };
 }
 
 // ---------- Conformational analysis ----------

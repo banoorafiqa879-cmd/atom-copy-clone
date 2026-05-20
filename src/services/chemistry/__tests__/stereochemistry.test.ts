@@ -31,6 +31,8 @@ vi.mock("@/services/chemistry/rdkit", async () => {
 import { analyzeStereochemistry } from "@/services/chemistry";
 import { analyzeFromSmiles } from "@/services/chemistry/stereochemistry";
 import { getRDKit } from "@/services/chemistry/rdkit";
+import { parseSDF } from "@/lib/iupac";
+import { analyzeStereochemistry as analyzeStereoCore } from "@/lib/stereochemistryEngine";
 import type { Molecule, Element } from "@/data/molecules";
 
 beforeAll(async () => {
@@ -52,6 +54,20 @@ function mkMol(
     atoms: atoms.map(([el, x, y, z]) => ({ el, pos: [x, y, z] })),
     bonds: bonds.map(([a, b, order]) => ({ a, b, order })),
   };
+}
+
+async function molFromSmiles(smiles: string, name = smiles): Promise<Molecule> {
+  const rdkit = await getRDKit();
+  const m = rdkit.get_mol(smiles);
+  if (!m) throw new Error(`bad smiles ${smiles}`);
+  try {
+    m.set_new_coords(true);
+    const parsed = parseSDF(m.get_molblock(), name);
+    if (!parsed) throw new Error(`could not parse ${smiles}`);
+    return parsed;
+  } finally {
+    m.delete();
+  }
 }
 
 describe("real stereochemistry engine", () => {
@@ -161,5 +177,42 @@ describe("real stereochemistry — SMILES-driven cases", () => {
     const r = await analyzeFromSmiles("C1CCC/C=C\\CC1");
     expect(r.ezBonds).toBeGreaterThanOrEqual(1);
     expect(r.totalStereoisomers).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("canonical graph stereochemistry engine", () => {
+  const expectCore = async (smiles: string, expected: Partial<{ optical: number; geometric: number; total: number; centres: number; geomSites: number; meso: boolean }>) => {
+    const mol = await molFromSmiles(smiles);
+    const r = analyzeStereoCore(mol);
+    if (expected.optical !== undefined) expect(r.opticalIsomerCount).toBe(expected.optical);
+    if (expected.geometric !== undefined) expect(r.geometricalIsomerCount).toBe(expected.geometric);
+    if (expected.total !== undefined) expect(r.totalStereoisomers).toBe(expected.total);
+    if (expected.centres !== undefined) expect(r.stereocentres.length).toBe(expected.centres);
+    if (expected.geomSites !== undefined) expect(r.geomSites).toBe(expected.geomSites);
+    if (expected.meso !== undefined) expect(r.isMeso).toBe(expected.meso);
+  };
+
+  it("validates optical stereochemistry and meso reduction", async () => {
+    await expectCore("CC(O)CC", { centres: 1, optical: 2, total: 2, meso: false });
+    await expectCore("CC(Cl)CC", { centres: 1, optical: 2, total: 2, meso: false });
+    await expectCore("CC(O)C(=O)O", { centres: 1, optical: 2, total: 2, meso: false });
+    await expectCore("CC(N)C(=O)O", { centres: 1, optical: 2, total: 2, meso: false });
+    await expectCore("CC(Cl)C(Cl)C", { centres: 2, optical: 3, total: 3, meso: true });
+    await expectCore("OC(=O)C(O)C(O)C(=O)O", { centres: 2, optical: 3, total: 3, meso: true });
+  });
+
+  it("validates geometrical topology without confusing ring substituents", async () => {
+    await expectCore("CC=CC", { geomSites: 1, geometric: 2, total: 2 });
+    await expectCore("ClC=CCl", { geomSites: 1, geometric: 2, total: 2 });
+    await expectCore("C=CC", { geomSites: 0, geometric: 0, total: 0 });
+    await expectCore("C1CCC=CC1", { geomSites: 0, geometric: 0, total: 0 });
+    await expectCore("C1CCC=CCCC1", { geomSites: 1, geometric: 2, total: 2 });
+    await expectCore("c1ccccc1C=Cc2ccccc2", { geomSites: 1, geometric: 2, total: 2 });
+  });
+
+  it("keeps achiral molecules at zero", async () => {
+    await expectCore("C", { centres: 0, optical: 0, geometric: 0, total: 0 });
+    await expectCore("CCO", { centres: 0, optical: 0, geometric: 0, total: 0 });
+    await expectCore("CCC", { centres: 0, optical: 0, geometric: 0, total: 0 });
   });
 });

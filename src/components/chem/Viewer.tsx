@@ -45,12 +45,10 @@ import {
   dominantHybridization,
   functionalGroups,
   ringCount,
-  stereocentres,
   detectAxes,
-  geometricIsomerInfo,
-  opticalIsomerInfo,
 } from "@/lib/chem-analysis";
 import { stereochemSummary, stereochemSummaryAsync, type StereoSummary } from "@/lib/stereochem";
+import { analyzeStereochemistry, type StereoAnalysis } from "@/lib/stereochemistryEngine";
 
 interface ViewerProps {
   initialMolecule?: Molecule;
@@ -113,9 +111,18 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
   const activePlane = planes[planeIdx] ?? null;
   const axes = useMemo(() => detectAxes(mol), [mol]);
   const activeAxis = axisIdx !== null ? axes[axisIdx] ?? null : null;
-  const stereoIdx = useMemo(() => stereocentres(mol), [mol]);
-  const geomInfo = useMemo(() => geometricIsomerInfo(mol), [mol]);
-  const optInfo = useMemo(() => opticalIsomerInfo(mol), [mol]);
+  const stereoAnalysis: StereoAnalysis = useMemo(() => analyzeStereochemistry(mol), [mol]);
+  const stereoIdx = stereoAnalysis.stereocentres;
+  const geomInfo = useMemo(() => ({
+    possible: stereoAnalysis.geometricalIsomerCount > 0,
+    count: stereoAnalysis.geometricalIsomerCount,
+    sites: stereoAnalysis.geomSites,
+  }), [stereoAnalysis]);
+  const optInfo = useMemo(() => ({
+    chiral: stereoAnalysis.opticalIsomerCount > 0,
+    count: stereoAnalysis.opticalIsomerCount,
+    centres: stereoAnalysis.stereocentres.length,
+  }), [stereoAnalysis]);
   const heuristicSummary = useMemo(
     () => stereochemSummary(mol, planes.length),
     [mol, planes.length],
@@ -946,6 +953,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           molecule={mol}
           initialTab={isoTab}
           onClose={() => setIsoOpen(false)}
+          analysis={stereoAnalysis}
           stereoCenters={stereoSummary.centres.length}
           isMeso={stereoSummary.isMeso}
           classification={stereoSummary.classification}
