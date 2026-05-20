@@ -17,6 +17,7 @@ import {
   cyclohexaneConformer,
   type RotatableBond,
 } from "@/lib/chem-analysis";
+import { analyzeStereochemistry, type StereoAnalysis } from "@/lib/stereochemistryEngine";
 import { cn } from "@/lib/utils";
 
 type Tab = "geometric" | "optical" | "conformation";
@@ -25,6 +26,7 @@ interface Props {
   molecule: Molecule;
   onClose: () => void;
   initialTab?: Tab;
+  analysis?: StereoAnalysis;
   /** Authoritative stereo report from the RDKit engine (preferred over local heuristics). */
   stereoCenters?: number;
   isMeso?: boolean;
