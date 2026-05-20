@@ -953,6 +953,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
           molecule={mol}
           initialTab={isoTab}
           onClose={() => setIsoOpen(false)}
+          analysis={stereoAnalysis}
           stereoCenters={stereoSummary.centres.length}
           isMeso={stereoSummary.isMeso}
           classification={stereoSummary.classification}
