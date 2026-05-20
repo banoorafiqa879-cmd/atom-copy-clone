@@ -39,59 +39,21 @@ export interface StereoSummary {
  *                       signal for meso classification.
  */
 export function stereochemSummary(mol: Molecule, planeCount: number): StereoSummary {
-  const centres = stereocentres(mol);
-  const geom = geometricIsomerInfo(mol);
-  const hasInternalMirror = planeCount > 0;
-
-  // Meso: either (a) connectivity shows paired stereocentres with identical
-  // environments, or (b) the 3D conformer happens to expose a mirror plane
-  // AND there are ≥2 centres. (a) is the robust signal; (b) is a fallback.
-  const mesoByConnectivity = isLikelyMeso(mol, centres);
-  const isMeso = centres.length >= 2 && (mesoByConnectivity || hasInternalMirror);
-  const isChiral = centres.length > 0 && !isMeso;
-
-  let classification: ChiralityClass;
-  if (centres.length === 0) classification = "achiral";
-  else if (isMeso) classification = "meso";
-  else if (centres.length === 1) classification = "chiral-single";
-  else classification = "chiral-multi";
-
-  const optical = opticalCount(centres.length, isMeso);
-  const geometric = geom.possible ? geom.count : 0;
-  const totalStereoisomers =
-    optical && geometric ? optical * geometric : optical || geometric;
-
-  const notes: string[] = [];
-  if (isMeso) {
-    notes.push(
-      `Meso compound — ${centres.length} stereocentres paired by internal symmetry. Optical isomers reduced to ${optical}.`,
-    );
-  } else if (centres.length > 0) {
-    notes.push(
-      `${centres.length} stereocentre${centres.length > 1 ? "s" : ""} → ${optical} optical isomer${optical > 1 ? "s" : ""}.`,
-    );
-  }
-  if (geom.possible) {
-    notes.push(
-      `${geom.sites} stereogenic C=C site${geom.sites > 1 ? "s" : ""} → ${geometric} geometrical isomer${geometric > 1 ? "s" : ""}.`,
-    );
-  }
-  if (centres.length === 0 && !geom.possible) {
-    notes.push("No stereocentres and no restricted-rotation sites detected.");
-  }
+  const analysis = analyzeStereochemistry(mol);
+  const hasInternalMirror = analysis.hasInternalMirror || planeCount > 0;
 
   return {
-    centres,
-    geomSites: geom.sites,
+    centres: analysis.stereocentres,
+    geomSites: analysis.geomSites,
     hasInternalMirror,
-    isMeso,
-    isChiral,
-    classification,
-    opticalIsomers: optical,
-    geometricIsomers: geometric,
-    totalStereoisomers,
+    isMeso: analysis.isMeso,
+    isChiral: analysis.isChiral,
+    classification: analysis.classification,
+    opticalIsomers: analysis.opticalIsomerCount,
+    geometricIsomers: analysis.geometricalIsomerCount,
+    totalStereoisomers: analysis.totalStereoisomers,
     approximate: false,
-    notes,
+    notes: analysis.notes,
   };
 }
 
