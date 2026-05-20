@@ -179,3 +179,40 @@ describe("real stereochemistry — SMILES-driven cases", () => {
     expect(r.totalStereoisomers).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("canonical graph stereochemistry engine", () => {
+  const expectCore = async (smiles: string, expected: Partial<{ optical: number; geometric: number; total: number; centres: number; geomSites: number; meso: boolean }>) => {
+    const mol = await molFromSmiles(smiles);
+    const r = analyzeStereoCore(mol);
+    if (expected.optical !== undefined) expect(r.opticalIsomerCount).toBe(expected.optical);
+    if (expected.geometric !== undefined) expect(r.geometricalIsomerCount).toBe(expected.geometric);
+    if (expected.total !== undefined) expect(r.totalStereoisomers).toBe(expected.total);
+    if (expected.centres !== undefined) expect(r.stereocentres.length).toBe(expected.centres);
+    if (expected.geomSites !== undefined) expect(r.geomSites).toBe(expected.geomSites);
+    if (expected.meso !== undefined) expect(r.isMeso).toBe(expected.meso);
+  };
+
+  it("validates optical stereochemistry and meso reduction", async () => {
+    await expectCore("CC(O)CC", { centres: 1, optical: 2, total: 2, meso: false });
+    await expectCore("CC(Cl)CC", { centres: 1, optical: 2, total: 2, meso: false });
+    await expectCore("CC(O)C(=O)O", { centres: 1, optical: 2, total: 2, meso: false });
+    await expectCore("CC(N)C(=O)O", { centres: 1, optical: 2, total: 2, meso: false });
+    await expectCore("CC(Cl)C(Cl)C", { centres: 2, optical: 3, total: 3, meso: true });
+    await expectCore("OC(=O)C(O)C(O)C(=O)O", { centres: 2, optical: 3, total: 3, meso: true });
+  });
+
+  it("validates geometrical topology without confusing ring substituents", async () => {
+    await expectCore("CC=CC", { geomSites: 1, geometric: 2, total: 2 });
+    await expectCore("ClC=CCl", { geomSites: 1, geometric: 2, total: 2 });
+    await expectCore("C=CC", { geomSites: 0, geometric: 0, total: 0 });
+    await expectCore("C1CCC=CC1", { geomSites: 0, geometric: 0, total: 0 });
+    await expectCore("C1CCC=CCCC1", { geomSites: 1, geometric: 2, total: 2 });
+    await expectCore("c1ccccc1C=Cc2ccccc2", { geomSites: 1, geometric: 2, total: 2 });
+  });
+
+  it("keeps achiral molecules at zero", async () => {
+    await expectCore("C", { centres: 0, optical: 0, geometric: 0, total: 0 });
+    await expectCore("CCO", { centres: 0, optical: 0, geometric: 0, total: 0 });
+    await expectCore("CCC", { centres: 0, optical: 0, geometric: 0, total: 0 });
+  });
+});
