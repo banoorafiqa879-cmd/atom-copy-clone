@@ -79,29 +79,50 @@ function buildGeometricIsomers(mol: Molecule, analysis: StereoAnalysis): { cis?:
     return { reason: "Both alkene carbons must carry two different substituents to produce distinct cis/trans (E/Z) isomers. At least one carbon has identical groups." };
   }
   const make = (mode: "cis" | "trans"): Molecule => {
-    const heavy = (els: string[], idxs: typeof subs1) => {
-      const heavyIdx = idxs.findIndex(n => mol.atoms[n.idx].el !== "H");
-      if (heavyIdx === -1) return { heavy: idxs[0], light: idxs[1] };
-      const lightIdx = idxs.findIndex(n => mol.atoms[n.idx].el === "H");
-      return { heavy: idxs[heavyIdx], light: idxs[lightIdx === -1 ? 1 - heavyIdx : lightIdx] };
+    const pick = (idxs: typeof subs1, ligands = site?.ligandsA) => {
+      const priority = ligands?.find(l => l.atomIndex !== null)?.atomIndex;
+      const high = idxs.find(n => n.idx === priority) ?? idxs.find(n => mol.atoms[n.idx].el !== "H") ?? idxs[0];
+      const low = idxs.find(n => n.idx !== high.idx) ?? high;
+      return { high, low };
     };
-    const h1 = heavy(els1, subs1);
-    const h2 = heavy(els2, subs2);
-    const atoms: Atom[] = [
-      { el: "C", pos: [-0.67, 0, 0] },
-      { el: "C", pos: [0.67, 0, 0] },
-      { el: mol.atoms[h1.heavy.idx].el, pos: [-1.3, 0.92, 0] },
-      { el: mol.atoms[h1.light.idx].el, pos: [-1.3, -0.92, 0] },
-      { el: mol.atoms[h2.heavy.idx].el, pos: [1.3, mode === "cis" ? 0.92 : -0.92, 0] },
-      { el: mol.atoms[h2.light.idx].el, pos: [1.3, mode === "cis" ? -0.92 : 0.92, 0] },
-    ];
-    const bonds = [
-      { a: 0, b: 1, order: 2 as const },
-      { a: 0, b: 2, order: 1 as const },
-      { a: 0, b: 3, order: 1 as const },
-      { a: 1, b: 4, order: 1 as const },
-      { a: 1, b: 5, order: 1 as const },
-    ];
+    const h1 = pick(subs1, site?.ligandsA);
+    const h2 = pick(subs2, site?.ligandsB);
+    const atoms: Atom[] = mol.atoms.map((atom) => ({ ...atom, pos: [...atom.pos] as [number, number, number] }));
+    atoms[c1].pos = [-0.67, 0, 0];
+    atoms[c2].pos = [0.67, 0, 0];
+
+    const branchAtoms = (root: number, blocked: number) => {
+      const seen = new Set<number>([blocked]);
+      const out: number[] = [];
+      const queue = [root];
+      while (queue.length) {
+        const cur = queue.shift()!;
+        if (seen.has(cur)) continue;
+        seen.add(cur);
+        out.push(cur);
+        for (const n of neighbors(mol, cur)) if (!seen.has(n.idx)) queue.push(n.idx);
+      }
+      return out;
+    };
+    const placeBranch = (root: number, center: number, target: [number, number, number]) => {
+      const sourceCenter = new THREE.Vector3(...mol.atoms[center].pos);
+      const sourceRoot = new THREE.Vector3(...mol.atoms[root].pos);
+      const targetCenter = new THREE.Vector3(...atoms[center].pos);
+      const targetRoot = new THREE.Vector3(...target);
+      const from = sourceRoot.clone().sub(sourceCenter);
+      const to = targetRoot.clone().sub(targetCenter);
+      if (from.lengthSq() < 1e-6 || to.lengthSq() < 1e-6) return;
+      const scale = to.length() / from.length();
+      const quat = new THREE.Quaternion().setFromUnitVectors(from.clone().normalize(), to.clone().normalize());
+      for (const idx of branchAtoms(root, center)) {
+        const p = new THREE.Vector3(...mol.atoms[idx].pos).sub(sourceCenter).multiplyScalar(scale).applyQuaternion(quat).add(targetCenter);
+        atoms[idx].pos = [p.x, p.y, p.z];
+      }
+    };
+    placeBranch(h1.high.idx, c1, [-1.3, 0.92, 0]);
+    placeBranch(h1.low.idx, c1, [-1.3, -0.92, 0]);
+    placeBranch(h2.high.idx, c2, [1.3, mode === "cis" ? 0.92 : -0.92, 0]);
+    placeBranch(h2.low.idx, c2, [1.3, mode === "cis" ? -0.92 : 0.92, 0]);
     return {
       id: `${mol.id}-${mode}`,
       name: `${mode}-${mol.name}`,
@@ -110,7 +131,7 @@ function buildGeometricIsomers(mol: Molecule, analysis: StereoAnalysis): { cis?:
       description: mode === "cis"
         ? "cis (Z) — higher-priority substituents on the same side of the C=C plane."
         : "trans (E) — higher-priority substituents on opposite sides of the C=C plane.",
-      atoms, bonds,
+      atoms, bonds: mol.bonds.map((bond) => ({ ...bond })),
     };
   };
   return { cis: make("cis"), trans: make("trans") };
