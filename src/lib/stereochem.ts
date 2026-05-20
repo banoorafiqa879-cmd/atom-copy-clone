@@ -12,16 +12,9 @@
 
 import type { Molecule } from "@/data/molecules";
 import {
-  stereocentres,
-  geometricIsomerInfo,
-  isLikelyMeso,
-} from "@/lib/chem-analysis";
-
-export type ChiralityClass =
-  | "achiral"
-  | "chiral-single"
-  | "chiral-multi"
-  | "meso";
+  analyzeStereochemistry,
+  type ChiralityClass,
+} from "@/lib/stereochemistryEngine";
 
 export interface StereoSummary {
   centres: number[];          // atom indices of detected stereocentres
@@ -37,16 +30,6 @@ export interface StereoSummary {
 
   approximate: boolean;
   notes: string[];
-}
-
-/** Distinct optical isomer count, handling meso correctly. */
-function opticalCount(n: number, meso: boolean): number {
-  if (n === 0) return 0;
-  if (!meso) return Math.pow(2, n);
-  // Meso: total = 2^(n-1) + 2^(n/2 - 1) for even n  (n=2 → 3, n=4 → 10).
-  // For odd n with a symmetry centre, fall back to 2^(n-1) (uncommon case).
-  if (n % 2 === 0) return Math.pow(2, n - 1) + Math.pow(2, n / 2 - 1);
-  return Math.pow(2, n - 1);
 }
 
 /**
