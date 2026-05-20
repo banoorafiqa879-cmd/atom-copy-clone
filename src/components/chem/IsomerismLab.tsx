@@ -57,14 +57,15 @@ function isRingBond(mol: Molecule, bondIdx: number): boolean {
 }
 
 /** Build cis/trans isomers around the first detected acyclic C=C bond. */
-function buildGeometricIsomers(mol: Molecule): { cis?: Molecule; trans?: Molecule; reason?: string } {
-  const dblIdx = mol.bonds.findIndex(b => b.order === 2 && mol.atoms[b.a].el === "C" && mol.atoms[b.b].el === "C");
+function buildGeometricIsomers(mol: Molecule, analysis: StereoAnalysis): { cis?: Molecule; trans?: Molecule; reason?: string; ringConstrained?: boolean } {
+  const site = analysis.geometricSites.find((s) => s.renderable) ?? analysis.geometricSites[0];
+  const dblIdx = site?.bondIndex ?? mol.bonds.findIndex(b => b.order === 2 && mol.atoms[b.a].el === "C" && mol.atoms[b.b].el === "C");
   if (dblIdx === -1) {
     return { reason: "Geometrical (cis–trans / E–Z) isomerism requires a restricted rotation, typically an acyclic C=C double bond whose sp² carbons each carry two different substituents. This molecule has no such bond." };
   }
   const dbl = mol.bonds[dblIdx];
-  if (isRingBond(mol, dblIdx)) {
-    return { reason: "The C=C double bond is part of a ring. Ring-constrained geometric isomers exist in principle, but exact 3D enumeration is not available in this engine — the Stereo Lab counts above remain accurate." };
+  if (site?.ringConstrained || isRingBond(mol, dblIdx)) {
+    return { reason: "The C=C double bond itself is part of a ring. Ring-constrained geometric isomers exist in principle, but exact 3D enumeration is not available in this viewer — the Stereo Lab counts above remain accurate.", ringConstrained: true };
   }
   const c1 = dbl.a, c2 = dbl.b;
   const subs1 = neighbors(mol, c1).filter(n => n.idx !== c2);
