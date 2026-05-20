@@ -31,6 +31,8 @@ vi.mock("@/services/chemistry/rdkit", async () => {
 import { analyzeStereochemistry } from "@/services/chemistry";
 import { analyzeFromSmiles } from "@/services/chemistry/stereochemistry";
 import { getRDKit } from "@/services/chemistry/rdkit";
+import { parseSDF } from "@/lib/iupac";
+import { analyzeStereochemistry as analyzeStereoCore } from "@/lib/stereochemistryEngine";
 import type { Molecule, Element } from "@/data/molecules";
 
 beforeAll(async () => {
@@ -52,6 +54,20 @@ function mkMol(
     atoms: atoms.map(([el, x, y, z]) => ({ el, pos: [x, y, z] })),
     bonds: bonds.map(([a, b, order]) => ({ a, b, order })),
   };
+}
+
+async function molFromSmiles(smiles: string, name = smiles): Promise<Molecule> {
+  const rdkit = await getRDKit();
+  const m = rdkit.get_mol(smiles);
+  if (!m) throw new Error(`bad smiles ${smiles}`);
+  try {
+    m.set_new_coords(true);
+    const parsed = parseSDF(m.get_molblock(), name);
+    if (!parsed) throw new Error(`could not parse ${smiles}`);
+    return parsed;
+  } finally {
+    m.delete();
+  }
 }
 
 describe("real stereochemistry engine", () => {
