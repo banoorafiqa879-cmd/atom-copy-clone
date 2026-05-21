@@ -101,7 +101,7 @@ export default function Molecule3D({
 
   // Outside-tap dismiss for selected atom tooltip
   useEffect(() => {
-    if (selected === null) return;
+    if (effectiveSelected === null) return;
     const dismiss = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
       if (t?.closest("[data-atom-tooltip]")) return;
@@ -109,7 +109,6 @@ export default function Molecule3D({
       onSelect(null);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onSelect(null); };
-    // Defer attach so the originating tap doesn't immediately dismiss
     const id = window.setTimeout(() => {
       window.addEventListener("pointerdown", dismiss);
       window.addEventListener("keydown", onKey);
@@ -119,7 +118,7 @@ export default function Molecule3D({
       window.removeEventListener("pointerdown", dismiss);
       window.removeEventListener("keydown", onKey);
     };
-  }, [selected, onSelect]);
+  }, [effectiveSelected, onSelect]);
 
   const stereoSet = useMemo(() => new Set(stereoIndices ?? []), [stereoIndices]);
   const singleStereo = (stereoIndices?.length ?? 0) === 1;
