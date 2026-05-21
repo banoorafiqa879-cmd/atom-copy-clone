@@ -356,6 +356,12 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
   if (geometricSites.length > 0) {
     notes.push(`${geometricSites.length} stereogenic C=C site${geometricSites.length > 1 ? "s" : ""} enumerate to ${geometricalIsomerCount} geometrical isomer${geometricalIsomerCount === 1 ? "" : "s"}.`);
   }
+  const mediumRingAlkene = geometricSites.find((s) => s.ringConstrained && (s.ringSize ?? 0) >= 8);
+  if (mediumRingAlkene) {
+    notes.push(
+      `Ring-constrained C=C in a ${mediumRingAlkene.ringSize}-membered ring detected. The trans (E) isomer of a medium-ring cycloalkene (e.g. trans-cyclooctene) is chiral due to ring strain; the cis (Z) isomer is achiral. Full 3D enumeration of ring-bound stereoisomers is not rendered in this viewer.`,
+    );
+  }
   if (stereoCenters.length === 0 && geometricSites.length === 0) {
     notes.push("No stereocentres and no eligible restricted-rotation C=C sites detected.");
   }
