@@ -19,6 +19,8 @@ interface Props {
   hasCOS?: boolean;
   activeAxis?: SymAxis | null;
   stereoIndices?: number[];
+  /** When false, atom picking + hover tooltip are disabled (e.g. a modal is open). */
+  interactive?: boolean;
 }
 
 function Bond({
