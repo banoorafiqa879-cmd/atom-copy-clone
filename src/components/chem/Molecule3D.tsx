@@ -19,6 +19,8 @@ interface Props {
   hasCOS?: boolean;
   activeAxis?: SymAxis | null;
   stereoIndices?: number[];
+  /** When false, atom picking + hover tooltip are disabled (e.g. a modal is open). */
+  interactive?: boolean;
 }
 
 function Bond({
@@ -73,8 +75,16 @@ export default function Molecule3D({
   hasCOS,
   activeAxis,
   stereoIndices,
+  interactive = true,
 }: Props) {
   const group = useRef<THREE.Group>(null);
+  const effectiveSelected = interactive ? selected : null;
+
+  // Force-clear any lingering selection when interactivity is turned off
+  // (e.g. a modal opens). Prevents stale tooltips leaking behind overlays.
+  useEffect(() => {
+    if (!interactive && selected !== null) onSelect(null);
+  }, [interactive, selected, onSelect]);
 
   const center = useMemo(() => {
     const c = new THREE.Vector3();
@@ -91,7 +101,7 @@ export default function Molecule3D({
 
   // Outside-tap dismiss for selected atom tooltip
   useEffect(() => {
-    if (selected === null) return;
+    if (effectiveSelected === null) return;
     const dismiss = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
       if (t?.closest("[data-atom-tooltip]")) return;
@@ -99,7 +109,6 @@ export default function Molecule3D({
       onSelect(null);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onSelect(null); };
-    // Defer attach so the originating tap doesn't immediately dismiss
     const id = window.setTimeout(() => {
       window.addEventListener("pointerdown", dismiss);
       window.addEventListener("keydown", onKey);
@@ -109,7 +118,7 @@ export default function Molecule3D({
       window.removeEventListener("pointerdown", dismiss);
       window.removeEventListener("keydown", onKey);
     };
-  }, [selected, onSelect]);
+  }, [effectiveSelected, onSelect]);
 
   const stereoSet = useMemo(() => new Set(stereoIndices ?? []), [stereoIndices]);
   const singleStereo = (stereoIndices?.length ?? 0) === 1;
@@ -135,16 +144,16 @@ export default function Molecule3D({
       {molecule.atoms.map((atom, i) => {
         const data = ELEMENT_DATA[atom.el];
         const r = spaceFilling ? data.radius * 2.4 : data.radius;
-        const isSelected = selected === i;
+        const isSelected = effectiveSelected === i;
         const isStereo = stereoSet.has(i);
         const subs = isSelected ? neighbors(molecule, i).map(n => molecule.atoms[n.idx].el) : [];
         return (
           <group key={i} position={atom.pos}>
             <mesh
-              onPointerDown={(e) => {
+              onPointerDown={interactive ? (e) => {
                 e.stopPropagation();
                 onSelect(isSelected ? null : i);
-              }}
+              } : undefined}
               scale={isSelected ? 1.18 : 1}
             >
               <sphereGeometry args={[r, 48, 48]} />

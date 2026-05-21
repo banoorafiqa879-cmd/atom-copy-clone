@@ -60,7 +60,7 @@ export default function StereoLab({
   return (
     <div
       ref={panelRef}
-      className="absolute right-3 sm:right-6 bottom-48 md:bottom-44 z-30 w-[300px] max-w-[92vw] glass rounded-2xl p-4 animate-scale-in border border-white/10"
+      className="absolute right-3 sm:right-6 bottom-48 md:bottom-44 z-[60] w-[300px] max-w-[92vw] glass rounded-2xl p-4 animate-scale-in border border-white/10"
       style={{ boxShadow: `0 0 40px ${accent}33` }}
     >
       <div className="flex items-center justify-between mb-3">

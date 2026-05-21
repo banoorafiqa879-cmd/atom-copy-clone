@@ -112,6 +112,13 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
   const axes = useMemo(() => detectAxes(mol), [mol]);
   const activeAxis = axisIdx !== null ? axes[axisIdx] ?? null : null;
   const stereoAnalysis: StereoAnalysis = useMemo(() => analyzeStereochemistry(mol), [mol]);
+  const anyOverlayOpen =
+    iupacOpen || builderOpen || isoOpen || stereoLabOpen || symOpen || infoOpen || speedOpen || presentation;
+  // Whenever any modal/panel opens, clear stale atom selection so the
+  // in-canvas tooltip cannot bleed behind the overlay.
+  useEffect(() => {
+    if (anyOverlayOpen) setSelected(null);
+  }, [anyOverlayOpen]);
   const sceneKey = `${mol.id}:${resetKey}:${showPOS ? "pos" : ""}:${showCOS ? "cos" : ""}:${activeAxis?.label ?? ""}:${showStereo ? "stereo" : ""}:${spaceFilling ? "space" : "ball"}`;
   const stereoIdx = stereoAnalysis.stereocentres;
   const geomInfo = useMemo(() => ({
@@ -323,6 +330,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
             hasCOS={hasCOS}
             activeAxis={activeAxis}
             stereoIndices={showStereo ? stereoIdx : []}
+            interactive={!anyOverlayOpen}
           />
           <Environment preset="city" />
         </Suspense>
@@ -429,7 +437,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
                 </button>
               </button>
               {speedOpen && (
-                <div className="absolute top-[calc(100%+8px)] right-0 glass rounded-xl border border-white/10 p-3 w-56 z-30 animate-fade-in">
+                <div className="absolute top-[calc(100%+8px)] right-0 glass rounded-xl border border-white/10 p-3 w-56 z-[60] animate-fade-in">
                   <div className="text-[10px] uppercase tracking-widest text-foreground/50 mb-1.5 flex items-center justify-between">
                     <span>Rotation speed</span>
                     <span className="font-mono text-foreground/70">{rotateSpeed.toFixed(1)}×</span>
@@ -523,7 +531,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
       {!presentation && infoOpen && (
         <div
           ref={infoPanelRef}
-          className="absolute left-3 sm:left-6 bottom-56 md:bottom-52 z-30 max-w-[80vw] sm:max-w-sm w-[300px] glass rounded-2xl p-4 animate-scale-in border border-white/10"
+          className="absolute left-3 sm:left-6 bottom-56 md:bottom-52 z-[60] max-w-[80vw] sm:max-w-sm w-[300px] glass rounded-2xl p-4 animate-scale-in border border-white/10"
         >
           <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(var(--neon-cyan))] mb-2 flex items-center gap-1">
             <AtomIcon className="h-3 w-3" /> Molecule Profile
@@ -560,7 +568,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
             ref={symButtonRef}
             onClick={() => setSymOpen((v) => !v)}
             className={cn(
-              "absolute right-6 bottom-32 md:bottom-28 z-20 glass rounded-full px-4 h-11 flex items-center gap-2 hover:scale-105 transition",
+              "absolute right-6 bottom-32 md:bottom-28 z-[60] glass rounded-full px-4 h-11 flex items-center gap-2 hover:scale-105 transition",
               symOpen && "neon-glow",
             )}
             title="Symmetry Lab"
@@ -574,7 +582,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
       {!presentation && symOpen && (
         <div
           ref={symPanelRef}
-          className="absolute right-6 bottom-48 md:bottom-44 z-30 w-[260px] glass rounded-2xl p-4 animate-scale-in border border-[hsl(var(--neon-cyan))]/20 shadow-[0_0_40px_hsl(var(--neon-cyan)/0.2)]"
+          className="absolute right-6 bottom-48 md:bottom-44 z-[60] w-[260px] glass rounded-2xl p-4 animate-scale-in border border-[hsl(var(--neon-cyan))]/20 shadow-[0_0_40px_hsl(var(--neon-cyan)/0.2)]"
         >
           <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(var(--neon-cyan))] mb-3 flex items-center gap-1">
             <Sparkles className="h-3 w-3" /> Symmetry Lab
@@ -877,7 +885,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
 
       {/* IUPAC panel */}
       {iupacOpen && !presentation && (
-        <div className="absolute top-20 right-6 z-20 w-[320px] max-w-[92vw] glass rounded-2xl p-4 animate-fade-in border border-[hsl(var(--neon-cyan))]/30 shadow-[0_0_40px_hsl(var(--neon-cyan)/0.25)]">
+        <div className="absolute top-20 right-6 z-[60] w-[320px] max-w-[92vw] glass rounded-2xl p-4 animate-fade-in border border-[hsl(var(--neon-cyan))]/30 shadow-[0_0_40px_hsl(var(--neon-cyan)/0.25)]">
           <div className="flex items-center justify-between mb-2">
             <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(var(--neon-cyan))] flex items-center gap-1">
               <Wand2 className="h-3 w-3" /> IUPAC → 3D
