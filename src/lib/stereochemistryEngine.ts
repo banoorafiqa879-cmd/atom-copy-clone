@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import type { Bond, Element, Molecule } from "@/data/molecules";
 
 export type ChiralityClass = "achiral" | "chiral-single" | "chiral-multi" | "meso";
@@ -23,6 +24,7 @@ export interface GeometricStereoSite {
   ringSize: number | null;
   ringConstrained: boolean;
   renderable: boolean;
+  cisTransAllowed: boolean;
   ligandsA: StereoLigand[];
   ligandsB: StereoLigand[];
 }
@@ -35,6 +37,8 @@ export interface StereoAnalysis {
   hasInternalMirror: boolean;
   isMeso: boolean;
   isChiral: boolean;
+  hasEnantiomericPairs: boolean;
+  hasMesoForms: boolean;
   classification: ChiralityClass;
   opticalIsomerCount: number;
   geometricalIsomerCount: number;
@@ -42,8 +46,15 @@ export interface StereoAnalysis {
   mesoStructures: string[];
   enantiomerPairs: Array<[string, string]>;
   geometricalPairs: Array<[string, string]>;
+  symmetryPlanes: SymmetryPlaneInfo[];
+  hasSymmetryCentre: boolean;
   notes: string[];
   approximate: false;
+}
+
+export interface SymmetryPlaneInfo {
+  normal: [number, number, number];
+  label: string;
 }
 
 const VALENCE: Record<Element, number> = {
@@ -194,6 +205,10 @@ function detectGeometricSites(mol: Molecule): GeometricStereoSite[] {
     if (ligandsB[0].signature === ligandsB[1].signature) continue;
     const ringSize = smallestRingSize(mol, bondIndex);
     if (ringSize !== null && ringSize < 8) continue;
+    const cisTransAllowed = (
+      (ligandsA[0].signature === ligandsB[0].signature && ligandsA[1].signature === ligandsB[1].signature) ||
+      (ligandsA[0].signature === ligandsB[1].signature && ligandsA[1].signature === ligandsB[0].signature)
+    );
     sites.push({
       bondIndex,
       a: bond.a,
@@ -201,6 +216,7 @@ function detectGeometricSites(mol: Molecule): GeometricStereoSite[] {
       ringSize,
       ringConstrained: ringSize !== null,
       renderable: ringSize === null,
+      cisTransAllowed,
       ligandsA,
       ligandsB,
     });
@@ -249,6 +265,67 @@ function enumerateOptical(centres: StereoCenterInfo[]) {
   return { count: unique.size, meso, pairs };
 }
 
+const SYMM_EPS = 0.32;
+
+function centerOfGeometry(mol: Molecule) {
+  const c = new THREE.Vector3();
+  mol.atoms.forEach((a) => c.add(new THREE.Vector3(...a.pos)));
+  return c.divideScalar(Math.max(1, mol.atoms.length));
+}
+
+function reflectedPoint(p: THREE.Vector3, normal: THREE.Vector3, point: THREE.Vector3) {
+  const v = p.clone().sub(point);
+  return p.clone().sub(normal.clone().multiplyScalar(2 * v.dot(normal)));
+}
+
+function planeMatches(mol: Molecule, normal: THREE.Vector3, point: THREE.Vector3) {
+  const used = new Set<number>();
+  for (let i = 0; i < mol.atoms.length; i++) {
+    const atom = mol.atoms[i];
+    const rp = reflectedPoint(new THREE.Vector3(...atom.pos), normal, point);
+    let match = -1;
+    for (let j = 0; j < mol.atoms.length; j++) {
+      if (used.has(j) || mol.atoms[j].el !== atom.el) continue;
+      if (new THREE.Vector3(...mol.atoms[j].pos).distanceTo(rp) <= SYMM_EPS) { match = j; break; }
+    }
+    if (match === -1) return false;
+    used.add(match);
+  }
+  return true;
+}
+
+function detectSymmetryPlanes(mol: Molecule, allowMirror: boolean): SymmetryPlaneInfo[] {
+  if (!allowMirror) return [];
+  const c = centerOfGeometry(mol);
+  const candidates: SymmetryPlaneInfo[] = [
+    { normal: [1, 0, 0], label: "YZ Plane" },
+    { normal: [0, 1, 0], label: "XZ Plane" },
+    { normal: [0, 0, 1], label: "XY Plane" },
+    { normal: [Math.SQRT1_2, Math.SQRT1_2, 0], label: "Diagonal Plane A" },
+    { normal: [Math.SQRT1_2, -Math.SQRT1_2, 0], label: "Diagonal Plane B" },
+    { normal: [Math.SQRT1_2, 0, Math.SQRT1_2], label: "Diagonal Plane C" },
+  ];
+  return candidates.filter((p) => planeMatches(mol, new THREE.Vector3(...p.normal).normalize(), c));
+}
+
+function detectSymmetryCentre(mol: Molecule, allowCentre: boolean): boolean {
+  if (!allowCentre) return false;
+  const c = centerOfGeometry(mol);
+  const used = new Set<number>();
+  for (let i = 0; i < mol.atoms.length; i++) {
+    const atom = mol.atoms[i];
+    const antipode = c.clone().multiplyScalar(2).sub(new THREE.Vector3(...atom.pos));
+    let match = -1;
+    for (let j = 0; j < mol.atoms.length; j++) {
+      if (used.has(j) || mol.atoms[j].el !== atom.el) continue;
+      if (new THREE.Vector3(...mol.atoms[j].pos).distanceTo(antipode) <= SYMM_EPS) { match = j; break; }
+    }
+    if (match === -1) return false;
+    used.add(match);
+  }
+  return true;
+}
+
 export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
   const stereoCenters = detectStereoCenters(mol);
   const geometricSites = detectGeometricSites(mol);
@@ -258,8 +335,10 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
   const totalStereoisomers = opticalIsomerCount && geometricalIsomerCount
     ? opticalIsomerCount * geometricalIsomerCount
     : opticalIsomerCount || geometricalIsomerCount;
-  const isMeso = optical.meso.length > 0;
-  const isChiral = stereoCenters.length > 0 && optical.pairs.length > 0;
+  const hasMesoForms = optical.meso.length > 0;
+  const hasEnantiomericPairs = optical.pairs.length > 0;
+  const isMeso = hasMesoForms;
+  const isChiral = stereoCenters.length > 0 && hasEnantiomericPairs && !hasMesoForms;
   const classification: ChiralityClass = stereoCenters.length === 0
     ? "achiral"
     : isMeso
@@ -280,14 +359,18 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
   if (stereoCenters.length === 0 && geometricSites.length === 0) {
     notes.push("No stereocentres and no eligible restricted-rotation C=C sites detected.");
   }
+  const symmetryPlanes = detectSymmetryPlanes(mol, !hasEnantiomericPairs || hasMesoForms);
+  const hasSymmetryCentre = detectSymmetryCentre(mol, !hasEnantiomericPairs || hasMesoForms);
   return {
     stereocentres: stereoCenters.map((c) => c.atomIndex),
     stereoCenters,
     geomSites: geometricSites.length,
     geometricSites,
-    hasInternalMirror: isMeso,
+    hasInternalMirror: hasMesoForms,
     isMeso,
     isChiral,
+    hasEnantiomericPairs,
+    hasMesoForms,
     classification,
     opticalIsomerCount,
     geometricalIsomerCount,
@@ -295,6 +378,8 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
     mesoStructures: optical.meso,
     enantiomerPairs: optical.pairs,
     geometricalPairs: geometricSites.map((s) => [`Z:${s.bondIndex}`, `E:${s.bondIndex}`]),
+    symmetryPlanes,
+    hasSymmetryCentre,
     notes,
     approximate: false,
   };

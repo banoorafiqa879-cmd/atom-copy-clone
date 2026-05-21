@@ -182,12 +182,10 @@ function CameraFit({ molecule }: { molecule: Molecule }) {
 
 function MiniViewer({
   mol,
-  mirrorPlane = false,
   syncRotationY,
   highlightStereo = false,
 }: {
   mol: Molecule;
-  mirrorPlane?: boolean;
   syncRotationY?: number;
   highlightStereo?: boolean;
 }) {
@@ -195,7 +193,7 @@ function MiniViewer({
   const stereoIdx = useMemo(() => (highlightStereo ? stereocentres(mol) : []), [mol, highlightStereo]);
   const initialDist = useMemo(() => moleculeFitDistance(mol), [mol]);
   return (
-    <Canvas camera={{ position: [0, 0, initialDist], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
+    <Canvas key={`${mol.id}-${highlightStereo ? "stereo" : "plain"}`} camera={{ position: [0, 0, initialDist], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
       <color attach="background" args={["#05060d"]} />
       <CameraFit molecule={mol} />
       <ambientLight intensity={0.5} />
@@ -212,12 +210,6 @@ function MiniViewer({
             stereoIndices={stereoIdx}
           />
         </group>
-        {mirrorPlane && (
-          <mesh rotation={[0, Math.PI / 2, 0]}>
-            <planeGeometry args={[5, 5]} />
-            <meshBasicMaterial color="#7af6ff" transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-        )}
         <Environment preset="city" />
       </Suspense>
       <OrbitControls
@@ -284,12 +276,12 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-stretch sm:items-center justify-center p-0 sm:p-6 animate-fade-in"
+      className="fixed inset-0 z-[120] bg-background/98 backdrop-blur-2xl flex items-stretch sm:items-center justify-center p-0 sm:p-6 animate-fade-in"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="glass relative w-full sm:max-w-5xl h-[100dvh] sm:h-[88vh] sm:rounded-2xl border-0 sm:border border-white/10 overflow-hidden flex flex-col"
+          className="glass relative w-full sm:max-w-5xl h-[100dvh] sm:h-[88vh] sm:rounded-2xl border-0 sm:border border-white/10 overflow-hidden flex flex-col bg-background/95"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/10 shrink-0">
@@ -475,12 +467,29 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
             const centers = stereoCenters ?? stereo.length;
             const meso = isMeso ?? false;
             const cls = classification ?? (centers === 0 ? "achiral" : "chiral-single");
-            const showMirror = centers > 0 && !meso;
+            const showMirror = analysis.hasEnantiomericPairs;
 
-            if (!showMirror) {
+            if (!showMirror && centers === 0) {
+              const reason = `${molecule.name} contains no stereogenic centres — it is achiral. Its mirror image is superimposable on the original, so no enantiomer exists.`;
+              return (
+                <div className="m-auto max-w-md w-full px-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
+                    <Info className="h-5 w-5 mx-auto mb-2 text-[hsl(var(--neon-cyan))]" />
+                    <div className="text-[10px] uppercase tracking-[0.3em] text-foreground/50 mb-2">No optical isomerism</div>
+                    <div className="text-base font-semibold mb-2">Achiral molecule</div>
+                    <p className="text-xs sm:text-sm text-foreground/80 leading-relaxed">{reason}</p>
+                    <div className="mt-3 text-[11px] text-foreground/50">
+                      Try a chiral compound: 2-butanol, lactic acid, alanine, or 2-chlorobutane.
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            if (!showMirror && meso) {
               const reason = centers === 0
                 ? `${molecule.name} contains no stereogenic centres — it is achiral. Its mirror image is superimposable on the original, so no enantiomer exists.`
-                : `${molecule.name} has stereocentres but is meso: an internal mirror plane makes the molecule identical to its mirror image. The compound is optically inactive overall.`;
+                : `${molecule.name} is a meso stereoisomer: an internal mirror plane makes this stereoisomer identical to its mirror image, so it is optically inactive overall.`;
               return (
                 <div className="m-auto max-w-md w-full px-2">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
@@ -499,16 +508,19 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
             }
 
             const labels = enantiomerLabels(centers);
+            const enginePair = analysis.enantiomerPairs[0];
             const pair = [
-              { mol: molecule, label: labels.a, sub: labels.aSub, mirror: false },
-              { mol: enant, label: labels.b, sub: labels.bSub, mirror: true },
+              { mol: molecule, label: enginePair?.[0] ?? labels.a, sub: enginePair ? "Enantiomeric configuration" : labels.aSub },
+              { mol: enant, label: enginePair?.[1] ?? labels.b, sub: enginePair ? "Mirror configuration" : labels.bSub },
             ];
 
             return (
               <div className="flex flex-col flex-1">
                 <div className="text-[11px] sm:text-xs text-foreground/70 mb-3 leading-relaxed">
                   <span className="text-[hsl(var(--neon-cyan))] font-medium">{centers} stereocentre{centers > 1 ? "s" : ""}</span> detected.
-                  Enantiomers are non-superimposable mirror images that rotate plane-polarized light in opposite directions.
+                  {meso
+                    ? " This molecule has an enantiomeric pair plus one meso stereoisomer."
+                    : " Enantiomers are non-superimposable mirror images that rotate plane-polarized light in opposite directions."}
                 </div>
 
                 {isMobile ? (
@@ -538,7 +550,7 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
                             <div className="font-semibold text-sm">{p.sub}</div>
                           </div>
                           <div className="flex-1 min-h-[320px]">
-                            <MiniViewer mol={p.mol} mirrorPlane={p.mirror} highlightStereo />
+                            <MiniViewer mol={p.mol} highlightStereo />
                           </div>
                         </div>
                       );
@@ -553,10 +565,19 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
                           <div className="font-semibold text-sm">{p.sub}</div>
                         </div>
                         <div className="flex-1 min-h-[280px]">
-                          <MiniViewer mol={p.mol} mirrorPlane={p.mirror} syncRotationY={compare ? syncRot : undefined} highlightStereo />
+                          <MiniViewer mol={p.mol} syncRotationY={compare ? syncRot : undefined} highlightStereo />
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+                {meso && (
+                  <div className="mt-3 rounded-xl border border-[#a78bff]/30 bg-[#a78bff]/10 p-3">
+                    <div className="text-[10px] uppercase tracking-widest text-[#a78bff] mb-1">Meso stereoisomer</div>
+                    <div className="text-sm font-semibold">{analysis.mesoStructures[0] ?? "Internal mirror form"}</div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-foreground/75">
+                      This stereoisomer contains stereocentres but has internal symmetry, so it is achiral and separate from the RR/SS enantiomeric pair.
+                    </p>
                   </div>
                 )}
               </div>

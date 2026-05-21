@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { Html } from "@react-three/drei";
 import { type Molecule, ELEMENT_DATA } from "@/data/molecules";
 import type { SymAxis } from "@/lib/chem-analysis";
+import { analyzeStereochemistry } from "@/lib/stereochemistryEngine";
 
 // ---------- Detection helpers ----------
 
@@ -47,38 +48,14 @@ export interface SymPlane {
 }
 
 export function detectPlanes(mol: Molecule): SymPlane[] {
-  const center = getCenter(mol);
-  const candidates: SymPlane[] = [
-    { normal: new THREE.Vector3(1, 0, 0), label: "YZ Plane" },
-    { normal: new THREE.Vector3(0, 1, 0), label: "XZ Plane" },
-    { normal: new THREE.Vector3(0, 0, 1), label: "XY Plane" },
-    { normal: new THREE.Vector3(1, 1, 0).normalize(), label: "Diagonal Plane A" },
-    { normal: new THREE.Vector3(1, -1, 0).normalize(), label: "Diagonal Plane B" },
-    { normal: new THREE.Vector3(1, 0, 1).normalize(), label: "Diagonal Plane C" },
-  ];
-  return candidates.filter((c) => planeIsSymmetry(mol, c.normal, center));
+  return analyzeStereochemistry(mol).symmetryPlanes.map((p) => ({
+    normal: new THREE.Vector3(...p.normal).normalize(),
+    label: p.label,
+  }));
 }
 
 export function detectCentre(mol: Molecule): boolean {
-  const center = getCenter(mol);
-  const used = new Set<number>();
-  for (let i = 0; i < mol.atoms.length; i++) {
-    const a = mol.atoms[i];
-    const p = new THREE.Vector3(...a.pos);
-    const r = new THREE.Vector3().copy(center).multiplyScalar(2).sub(p);
-    let match = -1;
-    for (let j = 0; j < mol.atoms.length; j++) {
-      if (used.has(j)) continue;
-      if (mol.atoms[j].el !== a.el) continue;
-      if (new THREE.Vector3(...mol.atoms[j].pos).distanceTo(r) < EPS) {
-        match = j;
-        break;
-      }
-    }
-    if (match === -1) return false;
-    used.add(match);
-  }
-  return true;
+  return analyzeStereochemistry(mol).hasSymmetryCentre;
 }
 
 // ---------- Visual components (rendered inside the same molecule group) ----------
