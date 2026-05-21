@@ -144,16 +144,16 @@ export default function Molecule3D({
       {molecule.atoms.map((atom, i) => {
         const data = ELEMENT_DATA[atom.el];
         const r = spaceFilling ? data.radius * 2.4 : data.radius;
-        const isSelected = selected === i;
+        const isSelected = effectiveSelected === i;
         const isStereo = stereoSet.has(i);
         const subs = isSelected ? neighbors(molecule, i).map(n => molecule.atoms[n.idx].el) : [];
         return (
           <group key={i} position={atom.pos}>
             <mesh
-              onPointerDown={(e) => {
+              onPointerDown={interactive ? (e) => {
                 e.stopPropagation();
                 onSelect(isSelected ? null : i);
-              }}
+              } : undefined}
               scale={isSelected ? 1.18 : 1}
             >
               <sphereGeometry args={[r, 48, 48]} />
