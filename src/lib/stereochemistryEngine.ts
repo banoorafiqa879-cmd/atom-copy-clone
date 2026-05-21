@@ -359,6 +359,8 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
   if (stereoCenters.length === 0 && geometricSites.length === 0) {
     notes.push("No stereocentres and no eligible restricted-rotation C=C sites detected.");
   }
+  const symmetryPlanes = detectSymmetryPlanes(mol, !hasEnantiomericPairs || hasMesoForms);
+  const hasSymmetryCentre = detectSymmetryCentre(mol, !hasEnantiomericPairs || hasMesoForms);
   return {
     stereocentres: stereoCenters.map((c) => c.atomIndex),
     stereoCenters,
@@ -376,6 +378,8 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
     mesoStructures: optical.meso,
     enantiomerPairs: optical.pairs,
     geometricalPairs: geometricSites.map((s) => [`Z:${s.bondIndex}`, `E:${s.bondIndex}`]),
+    symmetryPlanes,
+    hasSymmetryCentre,
     notes,
     approximate: false,
   };
