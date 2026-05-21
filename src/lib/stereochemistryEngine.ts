@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import type { Bond, Element, Molecule } from "@/data/molecules";
 
 export type ChiralityClass = "achiral" | "chiral-single" | "chiral-multi" | "meso";
@@ -45,8 +46,15 @@ export interface StereoAnalysis {
   mesoStructures: string[];
   enantiomerPairs: Array<[string, string]>;
   geometricalPairs: Array<[string, string]>;
+  symmetryPlanes: SymmetryPlaneInfo[];
+  hasSymmetryCentre: boolean;
   notes: string[];
   approximate: false;
+}
+
+export interface SymmetryPlaneInfo {
+  normal: [number, number, number];
+  label: string;
 }
 
 const VALENCE: Record<Element, number> = {
