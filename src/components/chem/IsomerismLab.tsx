@@ -182,12 +182,10 @@ function CameraFit({ molecule }: { molecule: Molecule }) {
 
 function MiniViewer({
   mol,
-  mirrorPlane = false,
   syncRotationY,
   highlightStereo = false,
 }: {
   mol: Molecule;
-  mirrorPlane?: boolean;
   syncRotationY?: number;
   highlightStereo?: boolean;
 }) {
@@ -195,7 +193,7 @@ function MiniViewer({
   const stereoIdx = useMemo(() => (highlightStereo ? stereocentres(mol) : []), [mol, highlightStereo]);
   const initialDist = useMemo(() => moleculeFitDistance(mol), [mol]);
   return (
-    <Canvas camera={{ position: [0, 0, initialDist], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
+    <Canvas key={`${mol.id}-${highlightStereo ? "stereo" : "plain"}`} camera={{ position: [0, 0, initialDist], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
       <color attach="background" args={["#05060d"]} />
       <CameraFit molecule={mol} />
       <ambientLight intensity={0.5} />
@@ -212,12 +210,6 @@ function MiniViewer({
             stereoIndices={stereoIdx}
           />
         </group>
-        {mirrorPlane && (
-          <mesh rotation={[0, Math.PI / 2, 0]}>
-            <planeGeometry args={[5, 5]} />
-            <meshBasicMaterial color="#7af6ff" transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-        )}
         <Environment preset="city" />
       </Suspense>
       <OrbitControls
@@ -284,12 +276,12 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-stretch sm:items-center justify-center p-0 sm:p-6 animate-fade-in"
+      className="fixed inset-0 z-[120] bg-background/98 backdrop-blur-2xl flex items-stretch sm:items-center justify-center p-0 sm:p-6 animate-fade-in"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="glass relative w-full sm:max-w-5xl h-[100dvh] sm:h-[88vh] sm:rounded-2xl border-0 sm:border border-white/10 overflow-hidden flex flex-col"
+          className="glass relative w-full sm:max-w-5xl h-[100dvh] sm:h-[88vh] sm:rounded-2xl border-0 sm:border border-white/10 overflow-hidden flex flex-col bg-background/95"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/10 shrink-0">
