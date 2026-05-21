@@ -379,6 +379,7 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
             }
 
             if (engineSaysSome && !builderHasIsomers) {
+              const mediumRingNote = analysis.notes.find((n) => n.includes("medium-ring"));
               return (
                 <div className="m-auto max-w-md w-full px-2">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
@@ -390,8 +391,17 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
                       {engineCount} geometrical isomer{engineCount === 1 ? "" : "s"} predicted
                     </div>
                     <p className="text-xs sm:text-sm text-foreground/80 leading-relaxed">
-                      The engine detected {engineSites ?? "ring-bound"} stereogenic C=C site{engineSites === 1 ? "" : "s"} that contribute to geometrical isomerism, but full 3D enumeration of ring-constrained stereoisomers is not yet supported in this viewer. The counts shown in the Stereo Lab remain accurate.
+                      Acyclic alkenes are fully supported with side-by-side 3D cis/trans pairs.
+                      Ring-constrained alkene stereochemistry is partially supported: the engine
+                      counts {engineSites ?? "the"} stereogenic C=C site{engineSites === 1 ? "" : "s"} accurately,
+                      but full 3D enumeration of ring-bound stereoisomers is not yet rendered here.
                     </p>
+                    {mediumRingNote && (
+                      <p className="mt-3 text-[11px] leading-relaxed text-[#ffd84d]/90 bg-[#ffd84d]/10 border border-[#ffd84d]/30 rounded-lg px-3 py-2 text-left">
+                        <span className="font-semibold uppercase tracking-widest text-[10px]">Note</span><br />
+                        {mediumRingNote}
+                      </p>
+                    )}
                     <div className="mt-3 text-[11px] text-foreground/50">Acyclic alkenes (e.g. 2-butene) render full 3D cis/trans pairs.</div>
                   </div>
                 </div>
