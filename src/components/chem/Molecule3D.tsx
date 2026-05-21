@@ -75,8 +75,16 @@ export default function Molecule3D({
   hasCOS,
   activeAxis,
   stereoIndices,
+  interactive = true,
 }: Props) {
   const group = useRef<THREE.Group>(null);
+  const effectiveSelected = interactive ? selected : null;
+
+  // Force-clear any lingering selection when interactivity is turned off
+  // (e.g. a modal opens). Prevents stale tooltips leaking behind overlays.
+  useEffect(() => {
+    if (!interactive && selected !== null) onSelect(null);
+  }, [interactive, selected, onSelect]);
 
   const center = useMemo(() => {
     const c = new THREE.Vector3();
