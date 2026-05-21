@@ -530,7 +530,7 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
                             <div className="font-semibold text-sm">{p.sub}</div>
                           </div>
                           <div className="flex-1 min-h-[320px]">
-                            <MiniViewer mol={p.mol} mirrorPlane={p.mirror} highlightStereo />
+                            <MiniViewer mol={p.mol} highlightStereo />
                           </div>
                         </div>
                       );
@@ -545,7 +545,7 @@ export default function IsomerismLab({ molecule, onClose, initialTab = "geometri
                           <div className="font-semibold text-sm">{p.sub}</div>
                         </div>
                         <div className="flex-1 min-h-[280px]">
-                          <MiniViewer mol={p.mol} mirrorPlane={p.mirror} syncRotationY={compare ? syncRot : undefined} highlightStereo />
+                          <MiniViewer mol={p.mol} syncRotationY={compare ? syncRot : undefined} highlightStereo />
                         </div>
                       </div>
                     ))}
