@@ -215,4 +215,18 @@ describe("canonical graph stereochemistry engine", () => {
     await expectCore("CCO", { centres: 0, optical: 0, geometric: 0, total: 0 });
     await expectCore("CCC", { centres: 0, optical: 0, geometric: 0, total: 0 });
   });
+
+  it("flags trans-cyclooctene chirality via engine note", async () => {
+    const mol = await molFromSmiles("C1CCC/C=C\\CC1");
+    const r = analyzeStereoCore(mol);
+    expect(r.geomSites).toBe(1);
+    expect(r.geometricSites[0].ringConstrained).toBe(true);
+    expect(r.geometricSites[0].ringSize).toBe(8);
+    expect(r.notes.some((n) => n.toLowerCase().includes("chiral"))).toBe(true);
+  });
+
+  it("validates additional chiral compounds", async () => {
+    await expectCore("CC(N)C(=O)O", { centres: 1, optical: 2, total: 2 }); // alanine
+    await expectCore("CCC(Cl)C", { centres: 1, optical: 2, total: 2 });    // 2-chlorobutane
+  });
 });
