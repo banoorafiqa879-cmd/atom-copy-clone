@@ -112,6 +112,13 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
   const axes = useMemo(() => detectAxes(mol), [mol]);
   const activeAxis = axisIdx !== null ? axes[axisIdx] ?? null : null;
   const stereoAnalysis: StereoAnalysis = useMemo(() => analyzeStereochemistry(mol), [mol]);
+  const anyOverlayOpen =
+    iupacOpen || builderOpen || isoOpen || stereoLabOpen || symOpen || infoOpen || speedOpen || presentation;
+  // Whenever any modal/panel opens, clear stale atom selection so the
+  // in-canvas tooltip cannot bleed behind the overlay.
+  useEffect(() => {
+    if (anyOverlayOpen) setSelected(null);
+  }, [anyOverlayOpen]);
   const sceneKey = `${mol.id}:${resetKey}:${showPOS ? "pos" : ""}:${showCOS ? "cos" : ""}:${activeAxis?.label ?? ""}:${showStereo ? "stereo" : ""}:${spaceFilling ? "space" : "ball"}`;
   const stereoIdx = stereoAnalysis.stereocentres;
   const geomInfo = useMemo(() => ({
