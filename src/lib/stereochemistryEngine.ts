@@ -265,6 +265,67 @@ function enumerateOptical(centres: StereoCenterInfo[]) {
   return { count: unique.size, meso, pairs };
 }
 
+const SYMM_EPS = 0.32;
+
+function centerOfGeometry(mol: Molecule) {
+  const c = new THREE.Vector3();
+  mol.atoms.forEach((a) => c.add(new THREE.Vector3(...a.pos)));
+  return c.divideScalar(Math.max(1, mol.atoms.length));
+}
+
+function reflectedPoint(p: THREE.Vector3, normal: THREE.Vector3, point: THREE.Vector3) {
+  const v = p.clone().sub(point);
+  return p.clone().sub(normal.clone().multiplyScalar(2 * v.dot(normal)));
+}
+
+function planeMatches(mol: Molecule, normal: THREE.Vector3, point: THREE.Vector3) {
+  const used = new Set<number>();
+  for (let i = 0; i < mol.atoms.length; i++) {
+    const atom = mol.atoms[i];
+    const rp = reflectedPoint(new THREE.Vector3(...atom.pos), normal, point);
+    let match = -1;
+    for (let j = 0; j < mol.atoms.length; j++) {
+      if (used.has(j) || mol.atoms[j].el !== atom.el) continue;
+      if (new THREE.Vector3(...mol.atoms[j].pos).distanceTo(rp) <= SYMM_EPS) { match = j; break; }
+    }
+    if (match === -1) return false;
+    used.add(match);
+  }
+  return true;
+}
+
+function detectSymmetryPlanes(mol: Molecule, allowMirror: boolean): SymmetryPlaneInfo[] {
+  if (!allowMirror) return [];
+  const c = centerOfGeometry(mol);
+  const candidates: SymmetryPlaneInfo[] = [
+    { normal: [1, 0, 0], label: "YZ Plane" },
+    { normal: [0, 1, 0], label: "XZ Plane" },
+    { normal: [0, 0, 1], label: "XY Plane" },
+    { normal: [Math.SQRT1_2, Math.SQRT1_2, 0], label: "Diagonal Plane A" },
+    { normal: [Math.SQRT1_2, -Math.SQRT1_2, 0], label: "Diagonal Plane B" },
+    { normal: [Math.SQRT1_2, 0, Math.SQRT1_2], label: "Diagonal Plane C" },
+  ];
+  return candidates.filter((p) => planeMatches(mol, new THREE.Vector3(...p.normal).normalize(), c));
+}
+
+function detectSymmetryCentre(mol: Molecule, allowCentre: boolean): boolean {
+  if (!allowCentre) return false;
+  const c = centerOfGeometry(mol);
+  const used = new Set<number>();
+  for (let i = 0; i < mol.atoms.length; i++) {
+    const atom = mol.atoms[i];
+    const antipode = c.clone().multiplyScalar(2).sub(new THREE.Vector3(...atom.pos));
+    let match = -1;
+    for (let j = 0; j < mol.atoms.length; j++) {
+      if (used.has(j) || mol.atoms[j].el !== atom.el) continue;
+      if (new THREE.Vector3(...mol.atoms[j].pos).distanceTo(antipode) <= SYMM_EPS) { match = j; break; }
+    }
+    if (match === -1) return false;
+    used.add(match);
+  }
+  return true;
+}
+
 export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
   const stereoCenters = detectStereoCenters(mol);
   const geometricSites = detectGeometricSites(mol);
