@@ -23,6 +23,7 @@ export interface GeometricStereoSite {
   ringSize: number | null;
   ringConstrained: boolean;
   renderable: boolean;
+  cisTransAllowed: boolean;
   ligandsA: StereoLigand[];
   ligandsB: StereoLigand[];
 }
@@ -35,6 +36,8 @@ export interface StereoAnalysis {
   hasInternalMirror: boolean;
   isMeso: boolean;
   isChiral: boolean;
+  hasEnantiomericPairs: boolean;
+  hasMesoForms: boolean;
   classification: ChiralityClass;
   opticalIsomerCount: number;
   geometricalIsomerCount: number;
@@ -194,6 +197,10 @@ function detectGeometricSites(mol: Molecule): GeometricStereoSite[] {
     if (ligandsB[0].signature === ligandsB[1].signature) continue;
     const ringSize = smallestRingSize(mol, bondIndex);
     if (ringSize !== null && ringSize < 8) continue;
+    const cisTransAllowed = (
+      (ligandsA[0].signature === ligandsB[0].signature && ligandsA[1].signature === ligandsB[1].signature) ||
+      (ligandsA[0].signature === ligandsB[1].signature && ligandsA[1].signature === ligandsB[0].signature)
+    );
     sites.push({
       bondIndex,
       a: bond.a,
@@ -201,6 +208,7 @@ function detectGeometricSites(mol: Molecule): GeometricStereoSite[] {
       ringSize,
       ringConstrained: ringSize !== null,
       renderable: ringSize === null,
+      cisTransAllowed,
       ligandsA,
       ligandsB,
     });
@@ -258,8 +266,10 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
   const totalStereoisomers = opticalIsomerCount && geometricalIsomerCount
     ? opticalIsomerCount * geometricalIsomerCount
     : opticalIsomerCount || geometricalIsomerCount;
-  const isMeso = optical.meso.length > 0;
-  const isChiral = stereoCenters.length > 0 && optical.pairs.length > 0;
+  const hasMesoForms = optical.meso.length > 0;
+  const hasEnantiomericPairs = optical.pairs.length > 0;
+  const isMeso = hasMesoForms;
+  const isChiral = stereoCenters.length > 0 && hasEnantiomericPairs && !hasMesoForms;
   const classification: ChiralityClass = stereoCenters.length === 0
     ? "achiral"
     : isMeso
@@ -285,9 +295,11 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
     stereoCenters,
     geomSites: geometricSites.length,
     geometricSites,
-    hasInternalMirror: isMeso,
+    hasInternalMirror: hasMesoForms,
     isMeso,
     isChiral,
+    hasEnantiomericPairs,
+    hasMesoForms,
     classification,
     opticalIsomerCount,
     geometricalIsomerCount,
