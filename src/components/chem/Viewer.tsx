@@ -323,6 +323,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
             hasCOS={hasCOS}
             activeAxis={activeAxis}
             stereoIndices={showStereo ? stereoIdx : []}
+            interactive={!anyOverlayOpen}
           />
           <Environment preset="city" />
         </Suspense>
