@@ -112,6 +112,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
   const axes = useMemo(() => detectAxes(mol), [mol]);
   const activeAxis = axisIdx !== null ? axes[axisIdx] ?? null : null;
   const stereoAnalysis: StereoAnalysis = useMemo(() => analyzeStereochemistry(mol), [mol]);
+  const sceneKey = `${mol.id}:${resetKey}:${showPOS ? "pos" : ""}:${showCOS ? "cos" : ""}:${activeAxis?.label ?? ""}:${showStereo ? "stereo" : ""}:${spaceFilling ? "space" : "ball"}`;
   const stereoIdx = stereoAnalysis.stereocentres;
   const geomInfo = useMemo(() => ({
     possible: stereoAnalysis.geometricalIsomerCount > 0,
@@ -173,6 +174,9 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
     setAxisIdx(null);
     setShowStereo(false);
     setStereoLabOpen(false);
+    setIsoOpen(false);
+    setInfoOpen(false);
+    setResetKey((k) => k + 1);
   }, [index]);
 
   // Persist "user is in the explorer" so navigating back from /library
@@ -306,7 +310,7 @@ export default function Viewer({ initialMolecule }: ViewerProps = {}) {
         <Suspense fallback={null}>
           <ParticleField />
           <Molecule3D
-            key={resetKey}
+            key={sceneKey}
             molecule={mol}
             spaceFilling={spaceFilling}
             autoRotate={autoRotate}
