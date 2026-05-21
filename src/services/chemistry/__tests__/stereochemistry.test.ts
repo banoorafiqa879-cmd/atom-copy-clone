@@ -206,7 +206,8 @@ describe("canonical graph stereochemistry engine", () => {
     await expectCore("ClC=CCl", { geomSites: 1, geometric: 2, total: 2 });
     await expectCore("C=CC", { geomSites: 0, geometric: 0, total: 0 });
     await expectCore("C1CCC=CC1", { geomSites: 0, geometric: 0, total: 0 });
-    await expectCore("C1CCC=CCCC1", { geomSites: 1, geometric: 2, total: 2 });
+    // cyclooctene: cis is achiral, trans is an axial-chirality enantiomer pair → 3 unique stereoisomers
+    await expectCore("C1CCC=CCCC1", { geomSites: 1, geometric: 2, optical: 2, total: 3 });
     await expectCore("c1ccccc1C=Cc2ccccc2", { geomSites: 1, geometric: 2, total: 2 });
   });
 

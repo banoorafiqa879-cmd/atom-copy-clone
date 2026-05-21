@@ -331,16 +331,40 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
   const geometricSites = detectGeometricSites(mol);
   const optical = enumerateOptical(stereoCenters);
   const geometricalIsomerCount = geometricSites.length ? 2 ** geometricSites.length : 0;
-  const opticalIsomerCount = optical.count;
-  const totalStereoisomers = opticalIsomerCount && geometricalIsomerCount
-    ? opticalIsomerCount * geometricalIsomerCount
-    : opticalIsomerCount || geometricalIsomerCount;
+
+  // Medium-ring trans-cycloalkenes (ring size >= 8) introduce axial chirality
+  // in their trans (E) isomer: the twisted ring cannot superimpose on its
+  // mirror image, producing an enantiomeric pair. The cis (Z) isomer remains
+  // achiral. Each such site therefore contributes 2 optical isomers (one
+  // enantiomeric pair) on top of the configurational stereocentre count.
+  const mediumRingChiralSites = geometricSites.filter(
+    (s) => s.ringConstrained && (s.ringSize ?? 0) >= 8,
+  );
+  const ringChiralEnantiomerPairs: Array<[string, string]> = mediumRingChiralSites.map((s) => [
+    `R-axial:${s.bondIndex}`,
+    `S-axial:${s.bondIndex}`,
+  ]);
+  const ringChiralContribution = mediumRingChiralSites.length > 0 ? 2 * mediumRingChiralSites.length : 0;
+
+  const opticalIsomerCount = optical.count + ringChiralContribution;
+  const totalStereoisomers = (() => {
+    if (stereoCenters.length > 0 && geometricalIsomerCount > 0) {
+      return optical.count * geometricalIsomerCount + ringChiralContribution;
+    }
+    if (geometricalIsomerCount > 0 && ringChiralContribution > 0) {
+      // cis isomer (1) + trans enantiomer pair (2) per medium-ring site
+      return geometricalIsomerCount + ringChiralContribution - mediumRingChiralSites.length;
+    }
+    return opticalIsomerCount || geometricalIsomerCount;
+  })();
+
   const hasMesoForms = optical.meso.length > 0;
-  const hasEnantiomericPairs = optical.pairs.length > 0;
+  const hasEnantiomericPairs = optical.pairs.length > 0 || ringChiralEnantiomerPairs.length > 0;
   const isMeso = hasMesoForms;
-  const isChiral = stereoCenters.length > 0 && hasEnantiomericPairs && !hasMesoForms;
+  const isChiral = (stereoCenters.length > 0 && optical.pairs.length > 0 && !hasMesoForms)
+    || ringChiralEnantiomerPairs.length > 0;
   const classification: ChiralityClass = stereoCenters.length === 0
-    ? "achiral"
+    ? (ringChiralEnantiomerPairs.length > 0 ? "chiral-single" : "achiral")
     : isMeso
       ? "meso"
       : stereoCenters.length === 1
@@ -348,7 +372,7 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
         : "chiral-multi";
   const notes: string[] = [];
   if (stereoCenters.length > 0) {
-    notes.push(`${stereoCenters.length} stereocentre${stereoCenters.length > 1 ? "s" : ""} enumerate to ${opticalIsomerCount} unique configurational stereoisomer${opticalIsomerCount === 1 ? "" : "s"}.`);
+    notes.push(`${stereoCenters.length} stereocentre${stereoCenters.length > 1 ? "s" : ""} enumerate to ${optical.count} unique configurational stereoisomer${optical.count === 1 ? "" : "s"}.`);
   }
   if (isMeso) {
     notes.push(`Symmetry-equivalent stereocentre assignments collapse duplicate configurations; ${optical.meso.length} meso form${optical.meso.length === 1 ? "" : "s"} detected.`);
@@ -356,17 +380,18 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
   if (geometricSites.length > 0) {
     notes.push(`${geometricSites.length} stereogenic C=C site${geometricSites.length > 1 ? "s" : ""} enumerate to ${geometricalIsomerCount} geometrical isomer${geometricalIsomerCount === 1 ? "" : "s"}.`);
   }
-  const mediumRingAlkene = geometricSites.find((s) => s.ringConstrained && (s.ringSize ?? 0) >= 8);
-  if (mediumRingAlkene) {
+  if (mediumRingChiralSites.length > 0) {
+    const s = mediumRingChiralSites[0];
     notes.push(
-      `Ring-constrained C=C in a ${mediumRingAlkene.ringSize}-membered ring detected. The trans (E) isomer of a medium-ring cycloalkene (e.g. trans-cyclooctene) is chiral due to ring strain; the cis (Z) isomer is achiral. Full 3D enumeration of ring-bound stereoisomers is not rendered in this viewer.`,
+      `Ring-constrained C=C in a ${s.ringSize}-membered ring detected. The trans (E) isomer is chiral due to ring strain (axial chirality) and exists as an enantiomeric pair, contributing ${ringChiralContribution} optical isomer${ringChiralContribution === 1 ? "" : "s"}; the cis (Z) isomer is achiral.`,
     );
   }
   if (stereoCenters.length === 0 && geometricSites.length === 0) {
     notes.push("No stereocentres and no eligible restricted-rotation C=C sites detected.");
   }
-  const symmetryPlanes = detectSymmetryPlanes(mol, !hasEnantiomericPairs || hasMesoForms);
-  const hasSymmetryCentre = detectSymmetryCentre(mol, !hasEnantiomericPairs || hasMesoForms);
+  const allowMirror = !hasEnantiomericPairs || hasMesoForms;
+  const symmetryPlanes = detectSymmetryPlanes(mol, allowMirror);
+  const hasSymmetryCentre = detectSymmetryCentre(mol, allowMirror);
   return {
     stereocentres: stereoCenters.map((c) => c.atomIndex),
     stereoCenters,
@@ -382,7 +407,7 @@ export function analyzeStereochemistry(mol: Molecule): StereoAnalysis {
     geometricalIsomerCount,
     totalStereoisomers,
     mesoStructures: optical.meso,
-    enantiomerPairs: optical.pairs,
+    enantiomerPairs: [...optical.pairs, ...ringChiralEnantiomerPairs],
     geometricalPairs: geometricSites.map((s) => [`Z:${s.bondIndex}`, `E:${s.bondIndex}`]),
     symmetryPlanes,
     hasSymmetryCentre,
