@@ -60,9 +60,6 @@ export default function Intro({ onStart }: { onStart: () => void }) {
           </Button>
         </div>
 
-        <div className="mt-12 text-xs text-foreground/40 uppercase tracking-widest">
-          Use ← → to navigate · Space to pause rotation · P for presentation
-        </div>
       </div>
     </div>
   );
