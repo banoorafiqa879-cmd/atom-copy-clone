@@ -168,15 +168,32 @@ function moleculeFitDistance(mol: Molecule, fovDeg = 45, paddingFactor = 1.6): n
   return Math.max(3.2, Math.min(dist, 22));
 }
 
-/** Camera fitter — re-fits whenever the molecule changes. */
+/** Camera fitter — re-fits when switching to a structurally different
+ *  molecule. Ignores transient `-rot<deg>` suffixes from bond rotation so
+ *  the camera doesn't jump on every slider tick. */
 function CameraFit({ molecule }: { molecule: Molecule }) {
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
+  const baseId = molecule.id.replace(/-rot-?\d+(\.\d+)?$/, "");
   useEffect(() => {
     const dist = moleculeFitDistance(molecule);
     camera.position.set(0, 0, dist);
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
-  }, [molecule.id, camera]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseId, camera]);
+
+  // WebGL context loss recovery (common on mobile / backgrounded tabs).
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const onLost = (e: Event) => { e.preventDefault(); };
+    const onRestored = () => { gl.setSize(canvas.clientWidth, canvas.clientHeight); };
+    canvas.addEventListener("webglcontextlost", onLost as EventListener);
+    canvas.addEventListener("webglcontextrestored", onRestored as EventListener);
+    return () => {
+      canvas.removeEventListener("webglcontextlost", onLost as EventListener);
+      canvas.removeEventListener("webglcontextrestored", onRestored as EventListener);
+    };
+  }, [gl]);
   return null;
 }
 
