@@ -168,15 +168,32 @@ function moleculeFitDistance(mol: Molecule, fovDeg = 45, paddingFactor = 1.6): n
   return Math.max(3.2, Math.min(dist, 22));
 }
 
-/** Camera fitter — re-fits whenever the molecule changes. */
+/** Camera fitter — re-fits when switching to a structurally different
+ *  molecule. Ignores transient `-rot<deg>` suffixes from bond rotation so
+ *  the camera doesn't jump on every slider tick. */
 function CameraFit({ molecule }: { molecule: Molecule }) {
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
+  const baseId = molecule.id.replace(/-rot-?\d+(\.\d+)?$/, "");
   useEffect(() => {
     const dist = moleculeFitDistance(molecule);
     camera.position.set(0, 0, dist);
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
-  }, [molecule.id, camera]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseId, camera]);
+
+  // WebGL context loss recovery (common on mobile / backgrounded tabs).
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const onLost = (e: Event) => { e.preventDefault(); };
+    const onRestored = () => { gl.setSize(canvas.clientWidth, canvas.clientHeight); };
+    canvas.addEventListener("webglcontextlost", onLost as EventListener);
+    canvas.addEventListener("webglcontextrestored", onRestored as EventListener);
+    return () => {
+      canvas.removeEventListener("webglcontextlost", onLost as EventListener);
+      canvas.removeEventListener("webglcontextrestored", onRestored as EventListener);
+    };
+  }, [gl]);
   return null;
 }
 
@@ -192,8 +209,12 @@ function MiniViewer({
   const synced = syncRotationY !== undefined;
   const stereoIdx = useMemo(() => (highlightStereo ? stereocentres(mol) : []), [mol, highlightStereo]);
   const initialDist = useMemo(() => moleculeFitDistance(mol), [mol]);
+  // Stable Canvas key: ignore transient suffixes like `-rot<deg>` that
+  // `rotateAroundBond` appends every slider tick. Remounting the Canvas on
+  // every tick destroys the WebGL context and causes black flashes on mobile.
+  const stableId = mol.id.replace(/-rot-?\d+(\.\d+)?$/, "");
   return (
-    <Canvas key={`${mol.id}-${highlightStereo ? "stereo" : "plain"}`} camera={{ position: [0, 0, initialDist], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
+    <Canvas key={`${stableId}-${highlightStereo ? "stereo" : "plain"}`} camera={{ position: [0, 0, initialDist], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true, powerPreference: "high-performance", preserveDrawingBuffer: false }}>
       <color attach="background" args={["#05060d"]} />
       <CameraFit molecule={mol} />
       <ambientLight intensity={0.5} />
