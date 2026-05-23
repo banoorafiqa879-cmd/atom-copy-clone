@@ -192,8 +192,12 @@ function MiniViewer({
   const synced = syncRotationY !== undefined;
   const stereoIdx = useMemo(() => (highlightStereo ? stereocentres(mol) : []), [mol, highlightStereo]);
   const initialDist = useMemo(() => moleculeFitDistance(mol), [mol]);
+  // Stable Canvas key: ignore transient suffixes like `-rot<deg>` that
+  // `rotateAroundBond` appends every slider tick. Remounting the Canvas on
+  // every tick destroys the WebGL context and causes black flashes on mobile.
+  const stableId = mol.id.replace(/-rot-?\d+(\.\d+)?$/, "");
   return (
-    <Canvas key={`${mol.id}-${highlightStereo ? "stereo" : "plain"}`} camera={{ position: [0, 0, initialDist], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
+    <Canvas key={`${stableId}-${highlightStereo ? "stereo" : "plain"}`} camera={{ position: [0, 0, initialDist], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true, powerPreference: "high-performance", preserveDrawingBuffer: false }}>
       <color attach="background" args={["#05060d"]} />
       <CameraFit molecule={mol} />
       <ambientLight intensity={0.5} />
