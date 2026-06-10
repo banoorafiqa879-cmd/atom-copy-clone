@@ -121,6 +121,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
 
   const f = useMemo(() => formula(state), [state]);
   const heavyCount = state.nodes.filter(n => n.el !== "H").length;
+  const graphDebug: BuilderGraphDebug = useMemo(() => describeBuilderGraph(state), [state]);
 
   // One-tap QA / teaching presets
   const loadPreset = (name: "ethanol" | "acetic-acid" | "2-butanol" | "benzene" | "chlorobenzene" | "cyclohexene") => {
@@ -646,11 +647,21 @@ export default function Builder({ onClose, onGenerate }: Props) {
 
   const generate = async () => {
     if (state.nodes.length === 0) return;
+    const validation = validateBuilderState(state);
+    if (!validation.valid) {
+      flash(validation.errors[0] ?? "Invalid molecular graph");
+      return;
+    }
     setBusy(true);
-    await new Promise(r => setTimeout(r, 300));
-    const mol = build3D(state, `Custom ${f}`);
-    onGenerate(mol);
-    setBusy(false);
+    try {
+      await new Promise(r => setTimeout(r, 120));
+      const mol = build3D(state, `Custom ${f}`);
+      onGenerate(mol);
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Could not generate this molecular graph");
+    } finally {
+      setBusy(false);
+    }
   };
 
   // ---- Render helpers ----
