@@ -51,49 +51,211 @@ function formula(state: State): string {
   return order.filter(e => counts[e]).map(e => (counts[e]! > 1 ? `${e}${counts[e]}` : e)).join("");
 }
 
+// ---------- 3D embedding ----------
+const BOND_TARGET: Record<string, number> = {
+  "C-C": 1.54, "C-N": 1.47, "C-O": 1.43, "C-S": 1.82, "C-F": 1.35,
+  "C-Cl": 1.77, "C-Br": 1.94, "N-O": 1.40, "N-N": 1.45, "O-O": 1.48,
+};
+const bondTarget = (a: Element, b: Element, order: BondOrder) => {
+  const key = [a, b].sort().join("-");
+  const base = BOND_TARGET[key] ?? 1.50;
+  return order === 3 ? base * 0.78 : order === 2 ? base * 0.87 : base;
+};
+
+function findSmallRings(adj: number[][], maxSize: number): number[][] {
+  const n = adj.length;
+  const rings: number[][] = [];
+  const seen = new Set<string>();
+  for (let start = 0; start < n; start++) {
+    const stack: { node: number; path: number[] }[] = [{ node: start, path: [start] }];
+    while (stack.length) {
+      const { node, path } = stack.pop()!;
+      if (path.length > maxSize) continue;
+      for (const nb of adj[node]) {
+        if (nb === start && path.length >= 3) {
+          const key = [...path].sort((a, b) => a - b).join(",");
+          if (!seen.has(key)) { seen.add(key); rings.push([...path]); }
+          continue;
+        }
+        if (path.includes(nb)) continue;
+        if (nb < start) continue;
+        stack.push({ node: nb, path: [...path, nb] });
+      }
+    }
+  }
+  return rings.sort((a, b) => a.length - b.length);
+}
+
+function puckerOffset(size: number, i: number): number {
+  if (size <= 3) return 0;
+  if (size === 4) return (i % 2 === 0 ? 0.18 : -0.18);
+  if (size === 5) return (i === 0 ? 0.45 : 0);
+  if (size === 6) return (i % 2 === 0 ? 0.28 : -0.28);
+  return ((i % 2 === 0 ? 1 : -1) * (0.32 + 0.06 * (size - 7)));
+}
+
+function relax(atoms: { el: Element; pos: [number, number, number] }[],
+               bonds: { a: number; b: number; order: BondOrder }[],
+               iterations: number) {
+  for (let it = 0; it < iterations; it++) {
+    const force: [number, number, number][] = atoms.map(() => [0, 0, 0]);
+    for (const b of bonds) {
+      const A = atoms[b.a].pos, B = atoms[b.b].pos;
+      const dx = B[0] - A[0], dy = B[1] - A[1], dz = B[2] - A[2];
+      const d = Math.hypot(dx, dy, dz) || 1e-6;
+      const target = bondTarget(atoms[b.a].el, atoms[b.b].el, b.order);
+      const k = (d - target) / d * 0.25;
+      force[b.a][0] += dx * k; force[b.a][1] += dy * k; force[b.a][2] += dz * k;
+      force[b.b][0] -= dx * k; force[b.b][1] -= dy * k; force[b.b][2] -= dz * k;
+    }
+    // mild non-bond repulsion
+    for (let i = 0; i < atoms.length; i++) {
+      for (let j = i + 1; j < atoms.length; j++) {
+        const A = atoms[i].pos, B = atoms[j].pos;
+        const dx = B[0] - A[0], dy = B[1] - A[1], dz = B[2] - A[2];
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > 1.44 || d2 < 1e-6) continue;
+        const d = Math.sqrt(d2);
+        const push = (1.2 - d) * 0.12 / d;
+        force[i][0] -= dx * push; force[i][1] -= dy * push; force[i][2] -= dz * push;
+        force[j][0] += dx * push; force[j][1] += dy * push; force[j][2] += dz * push;
+      }
+    }
+    for (let i = 0; i < atoms.length; i++) {
+      atoms[i].pos[0] += force[i][0];
+      atoms[i].pos[1] += force[i][1];
+      atoms[i].pos[2] += force[i][2];
+    }
+  }
+}
+
 function build3D(state: State, name: string): Molecule {
   const scale = 1 / 30;
   const idxMap = new Map<number, number>();
   const atoms: { el: Element; pos: [number, number, number] }[] = state.nodes.map((n, i) => {
     idxMap.set(n.id, i);
-    return { el: n.el, pos: [(n.x) * scale, -(n.y) * scale, 0] };
+    return { el: n.el, pos: [n.x * scale, -n.y * scale, 0] };
   });
   const bonds: { a: number; b: number; order: BondOrder }[] = state.edges
     .filter(e => idxMap.has(e.a) && idxMap.has(e.b))
     .map(e => ({ a: idxMap.get(e.a)!, b: idxMap.get(e.b)!, order: e.order }));
 
-  // Implicit H in 3D
-  state.nodes.forEach((n, i) => {
-    if (n.el === "H") return;
+  const adj: number[][] = atoms.map(() => []);
+  bonds.forEach(b => { adj[b.a].push(b.b); adj[b.b].push(b.a); });
+  const maxOrderAt: Record<number, number> = {};
+  bonds.forEach(b => {
+    maxOrderAt[b.a] = Math.max(maxOrderAt[b.a] ?? 1, b.order);
+    maxOrderAt[b.b] = Math.max(maxOrderAt[b.b] ?? 1, b.order);
+  });
+
+  // Detect rings → apply pucker (skip aromatic / sp² rings, keep planar)
+  const rings = findSmallRings(adj, 8);
+  const zSum = new Array(atoms.length).fill(0);
+  const zCount = new Array(atoms.length).fill(0);
+  for (const ring of rings) {
+    const sp2Ring = ring.some((_, k) => {
+      const a = ring[k], b = ring[(k + 1) % ring.length];
+      return bonds.some(bd => ((bd.a === a && bd.b === b) || (bd.b === a && bd.a === b)) && bd.order >= 2);
+    });
+    if (sp2Ring) continue;
+    for (let i = 0; i < ring.length; i++) {
+      zSum[ring[i]] += puckerOffset(ring.length, i);
+      zCount[ring[i]] += 1;
+    }
+  }
+  for (let i = 0; i < atoms.length; i++) {
+    if (zCount[i] > 0) atoms[i].pos[2] = zSum[i] / zCount[i];
+  }
+
+  relax(atoms, bonds, 80);
+
+  // Add Hs with hybridization-aware geometry
+  const heavyCount = atoms.length;
+  for (let i = 0; i < heavyCount; i++) {
+    const a = atoms[i];
+    if (a.el === "H") continue;
     let used = 0;
-    const neighbors: number[] = [];
-    for (const e of state.edges) {
-      if (e.a === n.id) { used += e.order; neighbors.push(e.b); }
-      else if (e.b === n.id) { used += e.order; neighbors.push(e.a); }
-    }
-    const need = Math.max(0, VALENCE[n.el] - used);
-    const [x, y] = atoms[i].pos;
-    // direction away from neighbours
-    let dx = 0, dy = 0;
-    for (const nb of neighbors) {
-      const j = idxMap.get(nb)!;
-      dx += x - atoms[j].pos[0];
-      dy += y - atoms[j].pos[1];
-    }
-    const baseAng = neighbors.length ? Math.atan2(dy, dx) : 0;
+    bonds.forEach(b => { if (b.a === i || b.b === i) used += b.order; });
+    const need = Math.max(0, VALENCE[a.el] - used);
+    if (need === 0) continue;
+    const maxOrder = maxOrderAt[i] ?? 1;
+    const sp2 = maxOrder === 2;
+    const sp = maxOrder === 3;
+    const bondLen = 1.09;
+    const nbrs = adj[i];
+    const dirs = nbrs.map(j => {
+      const dx = atoms[j].pos[0] - a.pos[0];
+      const dy = atoms[j].pos[1] - a.pos[1];
+      const dz = atoms[j].pos[2] - a.pos[2];
+      const L = Math.hypot(dx, dy, dz) || 1;
+      return [dx / L, dy / L, dz / L] as [number, number, number];
+    });
+    const sum: [number, number, number] = [0, 0, 0];
+    dirs.forEach(d => { sum[0] += d[0]; sum[1] += d[1]; sum[2] += d[2]; });
+    const sumL = Math.hypot(...sum) || 1;
+    const opp: [number, number, number] = nbrs.length === 0
+      ? [1, 0, 0]
+      : [-sum[0] / sumL, -sum[1] / sumL, -sum[2] / sumL];
+    const helper: [number, number, number] = Math.abs(opp[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    const perp1: [number, number, number] = [
+      opp[1] * helper[2] - opp[2] * helper[1],
+      opp[2] * helper[0] - opp[0] * helper[2],
+      opp[0] * helper[1] - opp[1] * helper[0],
+    ];
+    const p1L = Math.hypot(...perp1) || 1;
+    perp1[0] /= p1L; perp1[1] /= p1L; perp1[2] /= p1L;
+    const perp2: [number, number, number] = [
+      opp[1] * perp1[2] - opp[2] * perp1[1],
+      opp[2] * perp1[0] - opp[0] * perp1[2],
+      opp[0] * perp1[1] - opp[1] * perp1[0],
+    ];
     for (let k = 0; k < need; k++) {
-      const spread = need === 1 ? 0 : (k - (need - 1) / 2) * 0.9;
-      const ang = baseAng + spread;
-      const tilt = need >= 3 ? (k % 2 === 0 ? 0.7 : -0.7) : 0;
-      atoms.push({ el: "H", pos: [x + Math.cos(ang) * 1.0, y + Math.sin(ang) * 1.0, tilt] });
+      let dir: [number, number, number];
+      if (need === 1 || sp) {
+        dir = opp;
+      } else if (sp2) {
+        const t = (k - (need - 1) / 2) * (Math.PI / 3);
+        dir = [
+          opp[0] * Math.cos(t) + perp1[0] * Math.sin(t),
+          opp[1] * Math.cos(t) + perp1[1] * Math.sin(t),
+          opp[2] * Math.cos(t) + perp1[2] * Math.sin(t),
+        ];
+      } else {
+        const tetra = 109.5 * Math.PI / 180;
+        const phi = need === 2 ? (k === 0 ? 0 : Math.PI) : (k * 2 * Math.PI) / Math.max(need, 3);
+        const ca = Math.cos(tetra / 2);
+        const sa = Math.sin(tetra / 2);
+        const tilt: [number, number, number] = [
+          perp1[0] * Math.cos(phi) + perp2[0] * Math.sin(phi),
+          perp1[1] * Math.cos(phi) + perp2[1] * Math.sin(phi),
+          perp1[2] * Math.cos(phi) + perp2[2] * Math.sin(phi),
+        ];
+        dir = [
+          opp[0] * ca + tilt[0] * sa,
+          opp[1] * ca + tilt[1] * sa,
+          opp[2] * ca + tilt[2] * sa,
+        ];
+      }
+      const L = Math.hypot(...dir) || 1;
+      atoms.push({
+        el: "H",
+        pos: [
+          a.pos[0] + (dir[0] / L) * bondLen,
+          a.pos[1] + (dir[1] / L) * bondLen,
+          a.pos[2] + (dir[2] / L) * bondLen,
+        ],
+      });
       bonds.push({ a: i, b: atoms.length - 1, order: 1 });
     }
-  });
-  // Center
+  }
+
+  relax(atoms, bonds, 30);
+
   if (atoms.length) {
     const cx = atoms.reduce((s, a) => s + a.pos[0], 0) / atoms.length;
     const cy = atoms.reduce((s, a) => s + a.pos[1], 0) / atoms.length;
-    atoms.forEach(a => { a.pos = [a.pos[0] - cx, a.pos[1] - cy, a.pos[2]]; });
+    const cz = atoms.reduce((s, a) => s + a.pos[2], 0) / atoms.length;
+    atoms.forEach(a => { a.pos = [a.pos[0] - cx, a.pos[1] - cy, a.pos[2] - cz]; });
   }
   return {
     id: `built-${Date.now()}`,
