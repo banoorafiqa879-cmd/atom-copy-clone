@@ -889,6 +889,17 @@ export default function Builder({ onClose, onGenerate }: Props) {
             <div className="text-[10px] text-foreground/40 leading-relaxed border-t border-white/5 pt-2">
               <b>Tips:</b> <b>Atom tool</b> — tap on/near an existing atom to attach (drag to set direction). First atom on an empty canvas seeds the structure. <b>Bond tool</b> — drag A→B, or tap A then tap B. Tap a bond to cycle 1→2→3. Drop a ring on an edge to fuse. Pinch to zoom.
             </div>
+            <details className="text-[10px] text-foreground/50 leading-relaxed border-t border-white/5 pt-2" open>
+              <summary className="cursor-pointer text-[9px] uppercase tracking-widest text-[hsl(var(--neon-cyan))]">Graph Debug</summary>
+              <div className="mt-2 space-y-1 font-mono break-words max-h-48 overflow-y-auto pr-1">
+                <div>atoms: {graphDebug.atomCount} · bonds: {graphDebug.bondCount} · rings: {graphDebug.ringCount}</div>
+                <div>rings: {graphDebug.rings.length ? graphDebug.rings.map((ring, i) => `R${i + 1}[${ring.join("-")}]`).join(" ") : "—"}</div>
+                <div>atom rings: {Object.entries(graphDebug.atomRingMembership).map(([id, rings]) => `${id}:${rings.length ? rings.join("/") : "—"}`).join(" ") || "—"}</div>
+                <div>bond rings: {Object.entries(graphDebug.bondRingMembership).map(([id, rings]) => `${id}:${rings.length ? rings.join("/") : "—"}`).join(" ") || "—"}</div>
+                <div>adjacency: {graphDebug.adjacencyList.join(" | ") || "—"}</div>
+                {[...graphDebug.errors, ...graphDebug.warnings].map((msg) => <div key={msg} className="text-amber-200">{msg}</div>)}
+              </div>
+            </details>
           </div>
 
           {/* Canvas */}
