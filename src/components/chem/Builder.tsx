@@ -429,6 +429,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
     const next = clone(state);
     const r = (BOND_LEN / 2) / Math.sin(Math.PI / spec.sides);
 
+    // ---- Edge fusion: share two atoms + the bond ----
     if (anchorEdge) {
       const a = next.nodes.find(n => n.id === anchorEdge.a)!;
       const b = next.nodes.find(n => n.id === anchorEdge.b)!;
@@ -440,25 +441,32 @@ export default function Builder({ onClose, onGenerate }: Props) {
       const cmx = next.nodes.reduce((s, n) => s + n.x, 0) / next.nodes.length;
       const cmy = next.nodes.reduce((s, n) => s + n.y, 0) / next.nodes.length;
       if ((mx - cmx) * nx + (my - cmy) * ny < 0) { nx = -nx; ny = -ny; }
-      // apothem
       const apo = (BOND_LEN / 2) / Math.tan(Math.PI / spec.sides);
       const ringCx = mx + nx * apo;
       const ringCy = my + ny * apo;
       const startAng = Math.atan2(a.y - ringCy, a.x - ringCx);
       const ids: number[] = [a.id];
       for (let i = 1; i < spec.sides; i++) {
-        const ang = startAng - (i / spec.sides) * Math.PI * 2; // direction matters for orientation
-        const px = ringCx + Math.cos(ang) * r, py = ringCy + Math.sin(ang) * r;
-        // last node should equal b
+        const ang = startAng - (i / spec.sides) * Math.PI * 2;
         if (i === spec.sides - 1) { ids.push(b.id); break; }
-        const id = nid();
-        ids.push(id);
-        next.nodes.push({ id, el: "C", x: px, y: py });
+        const px = ringCx + Math.cos(ang) * r, py = ringCy + Math.sin(ang) * r;
+        // Auto-merge: if a new ring vertex coincides with an existing atom,
+        // reuse it instead of creating a duplicate (multi-atom fusion).
+        const overlap = nodeAt(next, px, py, SNAP * 0.8);
+        if (overlap && !ids.includes(overlap.id)) {
+          ids.push(overlap.id);
+        } else {
+          const id = nid();
+          ids.push(id);
+          next.nodes.push({ id, el: "C", x: px, y: py });
+        }
       }
-      // bonds (don't duplicate the existing a-b)
       for (let i = 0; i < spec.sides; i++) {
         const A = ids[i], B = ids[(i + 1) % spec.sides];
-        if ((A === a.id && B === b.id) || (A === b.id && B === a.id)) continue;
+        if (A === B) continue;
+        const exists = next.edges.some(ed =>
+          (ed.a === A && ed.b === B) || (ed.b === A && ed.a === B));
+        if (exists) continue;
         const order: BondOrder = spec.aromatic && i % 2 === 1 ? 2 : 1;
         next.edges.push({ id: nid(), a: A, b: B, order });
       }
@@ -470,23 +478,46 @@ export default function Builder({ onClose, onGenerate }: Props) {
     let ringCx = cx, ringCy = cy;
     const ids: number[] = [];
 
+    // ---- Spiro / atom fusion: share the anchor atom, orient away from its neighbours ----
     if (anchorNode) {
-      // Place ring sharing this atom: position so atom 0 is the anchor
-      ringCx = anchorNode.x;
-      ringCy = anchorNode.y - r; // ring above
-      startAngle = Math.PI / 2;
+      let nx = 0, ny = 0, count = 0;
+      for (const ed of next.edges) {
+        const other = ed.a === anchorNode.id ? next.nodes.find(n => n.id === ed.b)
+                   : ed.b === anchorNode.id ? next.nodes.find(n => n.id === ed.a) : null;
+        if (other) { nx += anchorNode.x - other.x; ny += anchorNode.y - other.y; count++; }
+      }
+      let dirX = 0, dirY = -1;
+      if (count > 0) {
+        const dL = Math.hypot(nx, ny);
+        if (dL > 0.01) { dirX = nx / dL; dirY = ny / dL; }
+      }
+      ringCx = anchorNode.x + dirX * r;
+      ringCy = anchorNode.y + dirY * r;
+      startAngle = Math.atan2(anchorNode.y - ringCy, anchorNode.x - ringCx);
       ids.push(anchorNode.id);
     }
 
     for (let i = ids.length; i < spec.sides; i++) {
       const ang = startAngle + (i / spec.sides) * Math.PI * 2;
-      const id = nid();
-      ids.push(id);
-      next.nodes.push({ id, el: "C", x: ringCx + Math.cos(ang) * r, y: ringCy + Math.sin(ang) * r });
+      const px = ringCx + Math.cos(ang) * r, py = ringCy + Math.sin(ang) * r;
+      // Auto-merge any vertex that lands on an existing atom (fusion).
+      const overlap = nodeAt(next, px, py, SNAP * 0.8);
+      if (overlap && !ids.includes(overlap.id)) {
+        ids.push(overlap.id);
+      } else {
+        const id = nid();
+        ids.push(id);
+        next.nodes.push({ id, el: "C", x: px, y: py });
+      }
     }
     for (let i = 0; i < spec.sides; i++) {
+      const A = ids[i], B = ids[(i + 1) % spec.sides];
+      if (A === B) continue;
+      const exists = next.edges.some(ed =>
+        (ed.a === A && ed.b === B) || (ed.b === A && ed.a === B));
+      if (exists) continue;
       const order: BondOrder = spec.aromatic && i % 2 === 0 ? 2 : 1;
-      next.edges.push({ id: nid(), a: ids[i], b: ids[(i + 1) % spec.sides], order });
+      next.edges.push({ id: nid(), a: A, b: B, order });
     }
     commit(next);
   };
