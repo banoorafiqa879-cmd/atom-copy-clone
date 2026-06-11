@@ -22,10 +22,31 @@ function expectTopologyPreserved(state: BuilderStateGraph) {
   return mol;
 }
 
+function angle(a: [number, number, number], center: [number, number, number], b: [number, number, number]) {
+  const va = [a[0] - center[0], a[1] - center[1], a[2] - center[2]];
+  const vb = [b[0] - center[0], b[1] - center[1], b[2] - center[2]];
+  const dot = va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2];
+  const la = Math.hypot(va[0], va[1], va[2]);
+  const lb = Math.hypot(vb[0], vb[1], vb[2]);
+  return Math.acos(Math.max(-1, Math.min(1, dot / (la * lb)))) * 180 / Math.PI;
+}
+
 const atom = (id: number, x: number, y: number) => ({ id, el: "C" as const, x, y });
 const bond = (id: number, a: number, b: number, order: 1 | 2 | 3 = 1) => ({ id, a, b, order });
 
 describe("builder graph-preserving 3D generation", () => {
+  it("generates methane as CH4 with tetrahedral geometry", () => {
+    const state: BuilderStateGraph = { nodes: [atom(1, 0, 0)], edges: [] };
+    const mol = expectTopologyPreserved(state);
+    expect(mol.formula).toBe("CH4");
+    expect(mol.name).toBe("Methane");
+    const h = mol.atoms.slice(1).map((a) => a.pos);
+    const angles: number[] = [];
+    for (let i = 0; i < h.length; i++) for (let j = i + 1; j < h.length; j++) angles.push(angle(h[i], mol.atoms[0].pos, h[j]));
+    expect(Math.min(...angles)).toBeGreaterThan(107);
+    expect(Math.max(...angles)).toBeLessThan(112);
+  });
+
   it("keeps cyclobutane topology and puckers the ring", () => {
     const state: BuilderStateGraph = {
       nodes: [atom(1, 0, 0), atom(2, 46, 0), atom(3, 46, 46), atom(4, 0, 46)],
@@ -40,6 +61,20 @@ describe("builder graph-preserving 3D generation", () => {
     expect(Math.max(...heavyZ)).toBeGreaterThan(0.05);
   });
 
+  it("preserves methylcyclobutane ring and substituent", () => {
+    const state: BuilderStateGraph = {
+      nodes: [atom(1, 0, 0), atom(2, 46, 0), atom(3, 46, 46), atom(4, 0, 46), atom(5, -46, 0)],
+      edges: [bond(10, 1, 2), bond(11, 2, 3), bond(12, 3, 4), bond(13, 4, 1), bond(14, 1, 5)],
+    };
+
+    const debug = describeBuilderGraph(state);
+    expect(debug.ringCount).toBe(1);
+    expect(debug.framework).toContain("Substituted cyclobutane");
+    const mol = expectTopologyPreserved(state);
+    expect(mol.formula).toBe("C5H10");
+    expect(mol.name).toBe("Methylcyclobutane");
+  });
+
   it("preserves two cyclobutanes fused through one shared bond", () => {
     const state: BuilderStateGraph = {
       nodes: [atom(1, 0, 0), atom(2, 46, 0), atom(3, 46, 46), atom(4, 0, 46), atom(5, 46, -46), atom(6, 0, -46)],
@@ -50,6 +85,20 @@ describe("builder graph-preserving 3D generation", () => {
     expect(debug.ringCount).toBe(2);
     expect(debug.bondRingMembership["1-2"]).toEqual([1, 2]);
     expectTopologyPreserved(state);
+  });
+
+  it("preserves fused cyclobutane-cyclopentane as C7H12 with shared bond", () => {
+    const state: BuilderStateGraph = {
+      nodes: [atom(1, 0, 0), atom(2, 46, 0), atom(3, 46, 46), atom(4, 0, 46), atom(5, 70, -35), atom(6, 23, -75), atom(7, -24, -35)],
+      edges: [bond(10, 1, 2), bond(11, 2, 3), bond(12, 3, 4), bond(13, 4, 1), bond(14, 2, 5), bond(15, 5, 6), bond(16, 6, 7), bond(17, 7, 1)],
+    };
+
+    const debug = describeBuilderGraph(state);
+    expect(debug.ringCount).toBe(2);
+    expect(debug.bondRingMembership["1-2"]).toEqual([1, 2]);
+    const mol = expectTopologyPreserved(state);
+    expect(mol.formula).toBe("C7H12");
+    expect(mol.group).toContain("Fused");
   });
 
   it("preserves decalin-like fused cyclohexane topology", () => {
@@ -80,6 +129,20 @@ describe("builder graph-preserving 3D generation", () => {
     expect(mol.bonds.slice(0, 6).map((bond) => bond.order)).toEqual([2, 1, 2, 1, 2, 1]);
     const heavyZ = mol.atoms.slice(0, 6).map((atom) => Math.abs(atom.pos[2]));
     expect(Math.max(...heavyZ)).toBeLessThan(0.001);
+    expect(mol.group).toContain("Aromatic");
+  });
+
+  it("generates cyclohexane as a chair-like non-planar ring", () => {
+    const state: BuilderStateGraph = {
+      nodes: [atom(1, 0, -46), atom(2, 40, -23), atom(3, 40, 23), atom(4, 0, 46), atom(5, -40, 23), atom(6, -40, -23)],
+      edges: [bond(10, 1, 2), bond(11, 2, 3), bond(12, 3, 4), bond(13, 4, 5), bond(14, 5, 6), bond(15, 6, 1)],
+    };
+
+    const mol = expectTopologyPreserved(state);
+    expect(mol.formula).toBe("C6H12");
+    expect(mol.name).toBe("Cyclohexane");
+    const heavyZ = mol.atoms.slice(0, 6).map((atom) => atom.pos[2]);
+    expect(Math.max(...heavyZ) - Math.min(...heavyZ)).toBeGreaterThan(0.5);
   });
 
   it("preserves spiro topology with one shared atom and two independent rings", () => {
@@ -94,6 +157,18 @@ describe("builder graph-preserving 3D generation", () => {
     expectTopologyPreserved(state);
   });
 
+  it("preserves bridged ring connectivity", () => {
+    const state: BuilderStateGraph = {
+      nodes: [atom(1, 0, 0), atom(2, 46, 0), atom(3, 70, 40), atom(4, 23, 80), atom(5, -24, 40), atom(6, 23, 28)],
+      edges: [bond(10, 1, 2), bond(11, 2, 3), bond(12, 3, 4), bond(13, 4, 5), bond(14, 5, 1), bond(15, 1, 6), bond(16, 6, 3)],
+    };
+
+    const debug = describeBuilderGraph(state);
+    expect(debug.ringCount).toBe(2);
+    expect(debug.structureClass).toContain("Bridged");
+    expectTopologyPreserved(state);
+  });
+
   it("rejects invalid valence instead of silently generating a random structure", () => {
     const state: BuilderStateGraph = {
       nodes: [atom(1, 0, 0), atom(2, 46, 0), atom(3, -46, 0), atom(4, 0, 46)],
@@ -103,5 +178,16 @@ describe("builder graph-preserving 3D generation", () => {
     const validation = validateBuilderState(state);
     expect(validation.valid).toBe(false);
     expect(validation.errors.join(" ")).toContain("exceeds valence");
+  });
+
+  it("rejects invalid small-ring geometry", () => {
+    const state: BuilderStateGraph = {
+      nodes: [atom(1, 0, 0), atom(2, 46, 0), atom(3, 23, 40)],
+      edges: [bond(10, 1, 2, 2), bond(11, 2, 3, 2), bond(12, 3, 1)],
+    };
+
+    const validation = validateBuilderState(state);
+    expect(validation.valid).toBe(false);
+    expect(validation.errors.join(" ")).toMatch(/impossible|small-ring/);
   });
 });
