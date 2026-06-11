@@ -338,14 +338,15 @@ function classifyStructure(graph: NormalizedGraph) {
   const hetero = graph.nodes.filter((node) => node.el !== "C" && node.el !== "H");
   const ringCount = graph.cycleRank;
   const aromaticRings = graph.rings.filter((ring) => isAromaticLikeRing(ring, graph.bonds));
-  const hasFusedBond = [...graph.bondRingMembership.values()].some((rings) => rings.length > 1);
+  const sharedRingBondCount = [...graph.bondRingMembership.values()].filter((rings) => rings.length > 1).length;
+  const hasFusedBond = sharedRingBondCount > 0;
   const sharedRingAtoms = [...graph.atomRingMembership.entries()].filter(([, rings]) => rings.length > 1).map(([atomId]) => atomId);
   const sharedRingAtomDegree3 = sharedRingAtoms.filter((atomId) => {
     const atomIndex = graph.nodes.findIndex((node) => node.id === atomId);
     return atomIndex >= 0 && graph.adjacency[atomIndex].length >= 3;
   }).length;
   const hasSpiroAtom = sharedRingAtoms.length === 1 && !hasFusedBond;
-  const hasBridge = ringCount > 1 && sharedRingAtomDegree3 >= 2 && graph.rings.some((ring) => ring.length <= 5);
+  const hasBridge = ringCount > 1 && sharedRingAtomDegree3 >= 2 && sharedRingBondCount > 1;
   const allSingle = graph.bonds.every((bond) => bond.order === 1);
   const carbonOnly = hetero.length === 0;
 
