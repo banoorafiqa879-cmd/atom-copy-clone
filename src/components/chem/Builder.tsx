@@ -403,7 +403,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
         const next = clone(state);
         const ed = next.edges.find(x => x.id === hitEdge.id)!;
         ed.order = ((ed.order % 3) + 1) as BondOrder;
-        commit(next);
+        commit(next, { validateChemistry: true });
         return;
       }
       let from = hitNode;
@@ -511,7 +511,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
             );
             if (existing) existing.order = tool.order;
             else next.edges.push({ id: nid(), a: src.id, b: fromNode.id, order: tool.order });
-            commit(next);
+            commit(next, { validateChemistry: true });
             setPendingBond(null);
             setDrag(null);
             return;
@@ -557,7 +557,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
       );
       if (existing) existing.order = tool.order;
       else next.edges.push({ id: nid(), a: fromNode.id, b: target.id, order: tool.order });
-      commit(next);
+      commit(next, { validateChemistry: true });
       setDrag(null);
       return;
     }
@@ -606,7 +606,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
         next.nodes.push({ id, el: drag.el, x: nx, y: ny });
         next.edges.push({ id: nid(), a: anchor.id, b: id, order: 1 });
       }
-      commit(next);
+      commit(next, { validateChemistry: true });
       setDrag(null);
       return;
     }
