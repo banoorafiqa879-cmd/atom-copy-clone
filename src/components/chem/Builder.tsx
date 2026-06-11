@@ -175,10 +175,19 @@ export default function Builder({ onClose, onGenerate }: Props) {
     commit({ nodes, edges });
   };
 
-  const commit = useCallback((next: State) => {
+  const commit = useCallback((next: State, options: { validateChemistry?: boolean } = {}) => {
+    if (options.validateChemistry) {
+      const validation = validateBuilderState(next);
+      if (!validation.valid) {
+        console.warn("Builder chemistry validation blocked graph mutation", validation.errors, next);
+        flash("This bond arrangement is chemically invalid.");
+        return false;
+      }
+    }
     setHistory(h => [...h.slice(-50), state]);
     setFuture([]);
     setState(next);
+    return true;
   }, [state]);
 
   const undo = () => {
@@ -255,7 +264,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
         const order: BondOrder = spec.aromatic && i % 2 === 1 ? 2 : 1;
         next.edges.push({ id: nid(), a: A, b: B, order });
       }
-      commit(next);
+      commit(next, { validateChemistry: true });
       return;
     }
 
@@ -304,7 +313,7 @@ export default function Builder({ onClose, onGenerate }: Props) {
       const order: BondOrder = spec.aromatic && i % 2 === 0 ? 2 : 1;
       next.edges.push({ id: nid(), a: A, b: B, order });
     }
-    commit(next);
+    commit(next, { validateChemistry: true });
   };
 
   // ---- Pointer handling on SVG ----
