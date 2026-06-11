@@ -339,8 +339,13 @@ function classifyStructure(graph: NormalizedGraph) {
   const ringCount = graph.cycleRank;
   const aromaticRings = graph.rings.filter((ring) => isAromaticLikeRing(ring, graph.bonds));
   const hasFusedBond = [...graph.bondRingMembership.values()].some((rings) => rings.length > 1);
-  const hasSpiroAtom = [...graph.atomRingMembership.values()].some((rings) => rings.length > 1) && !hasFusedBond;
-  const hasBridge = ringCount > 1 && !hasFusedBond && !hasSpiroAtom;
+  const sharedRingAtoms = [...graph.atomRingMembership.entries()].filter(([, rings]) => rings.length > 1).map(([atomId]) => atomId);
+  const sharedRingAtomDegree3 = sharedRingAtoms.filter((atomId) => {
+    const atomIndex = graph.nodes.findIndex((node) => node.id === atomId);
+    return atomIndex >= 0 && graph.adjacency[atomIndex].length >= 3;
+  }).length;
+  const hasSpiroAtom = sharedRingAtoms.length === 1 && !hasFusedBond;
+  const hasBridge = ringCount > 1 && sharedRingAtomDegree3 >= 2 && graph.rings.some((ring) => ring.length <= 5);
   const allSingle = graph.bonds.every((bond) => bond.order === 1);
   const carbonOnly = hetero.length === 0;
 
@@ -378,6 +383,10 @@ function classifyStructure(graph: NormalizedGraph) {
     if (substituentCount === 0) detectedName = framework;
     else if (substituentCount === 1) detectedName = `Methyl${(RING_NAMES[ring.length] ?? "cycloalkane").toLowerCase()}`;
     else detectedName = `${framework} ${formula}`;
+  } else if (hasBridge && !aromaticRings.length) {
+    structureClass = "Bridged ring system";
+    framework = `${ringCount}-ring bridged framework`;
+    detectedName = `Bridged system ${formula}`;
   } else if (hasFusedBond) {
     structureClass = aromaticRings.length ? "Fused aromatic ring system" : "Fused bicyclic/polycyclic ring system";
     framework = `${ringCount}-ring fused framework`;
@@ -386,10 +395,6 @@ function classifyStructure(graph: NormalizedGraph) {
     structureClass = "Spiro ring system";
     framework = `${ringCount}-ring spiro framework`;
     detectedName = `Spiro system ${formula}`;
-  } else if (hasBridge) {
-    structureClass = "Bridged ring system";
-    framework = `${ringCount}-ring bridged framework`;
-    detectedName = `Bridged system ${formula}`;
   } else if (ringCount > 0) {
     structureClass = "Cyclic molecular graph";
     framework = `${ringCount}-ring cyclic framework`;
@@ -810,7 +815,7 @@ export function build3D(state: BuilderStateGraph, name: string): Molecule {
   }
 
   const identity = classifyStructure(graph);
-  const moleculeName = name.startsWith("Custom") ? identity.detectedName : name;
+  const moleculeName = identity.detectedName.startsWith("Custom") && !name.startsWith("Custom") ? name : identity.detectedName;
 
   return {
     id: `built-${Date.now()}`,
